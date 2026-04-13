@@ -1,0 +1,406 @@
+[**@bugchud/core API Reference v0.1.0**](../../../index.md)
+
+***
+
+[@bugchud/core API Reference](../../../index.md) / [data/imported](../index.md) / importedSpells
+
+# Variable: importedSpells
+
+```ts
+const importedSpells: readonly [{
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "FIREBALL";
+  slug: "fireball";
+  summary: "Blast of fire explodes, dealing [dice] damage to everything within; dodge halves damage and 5+ MD ignites failed targets.";
+  tags: readonly ["spell", "fire", "area"];
+  source: SourceTrace;
+  circle: 0;
+  school: "pyric";
+  manaCost: 0;
+  delivery: "burst";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "dodge";
+  attackProfile: {
+     label: "Fireball blast";
+     mode: "heavy";
+     accuracyBase: 0;
+     damage: DiceExpression;
+     damageType: "fire";
+     rangeBand: "near";
+  };
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "LIGHTNING BOLT";
+  slug: "lightning-bolt";
+  summary: "Crackling bolt of lightning hits a visible target, dealing [dice] damage and ignoring all soaks.";
+  tags: readonly ["spell", "shock", "anti-armor"];
+  source: SourceTrace;
+  circle: 0;
+  school: "storm";
+  manaCost: 0;
+  delivery: "beam";
+  rangeDescription: "Long";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  attackProfile: {
+     label: "Lightning bolt";
+     mode: "heavy";
+     accuracyBase: 0;
+     damage: DiceExpression;
+     damageType: "shock";
+     rangeBand: "far";
+  };
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "MAGICK MISSILE";
+  slug: "magick-missile";
+  summary: "Arcane projectiles strike [dice] targets and deal [dice] damage.";
+  tags: readonly ["spell", "projectile", "arcane"];
+  source: SourceTrace;
+  circle: 0;
+  school: "arcane";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "TELEPORT";
+  slug: "teleport";
+  summary: "Teleport the caster and up to [dice] touched creatures to a place the caster has been, up to [dice]x10 miles away.";
+  tags: readonly ["spell", "movement", "translocation"];
+  source: SourceTrace;
+  circle: 0;
+  school: "translocation";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "HEALING";
+  slug: "healing";
+  summary: "Wave a hand and sew a target's wounds back together, healing for [dice].";
+  tags: readonly ["spell", "healing"];
+  source: SourceTrace;
+  circle: 0;
+  school: "restoration";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Short";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "DOOMTOUCH";
+  slug: "doomtouch";
+  summary: "Target makes [dice] Death saves; on a failure, it explodes into bloody gibs.";
+  tags: readonly ["spell", "death", "touch"];
+  source: SourceTrace;
+  circle: 0;
+  school: "death";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "death";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "READ MIND";
+  slug: "read-mind";
+  summary: "Target saves vs Magick or the caster hears its current thoughts for [dice] minutes.";
+  tags: readonly ["spell", "divination", "mind"];
+  source: SourceTrace;
+  circle: 0;
+  school: "divination";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "magick";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "PROTECT";
+  slug: "protect";
+  summary: "Target receives [best of] Soaks for 1d4 turns.";
+  tags: readonly ["spell", "ward", "defense"];
+  source: SourceTrace;
+  circle: 0;
+  school: "warding";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Short";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "ABJURE";
+  slug: "abjure";
+  summary: "Characters attempting to move closer to the target must save vs Magick for [dice] minutes.";
+  tags: readonly ["spell", "abjuration", "control"];
+  source: SourceTrace;
+  circle: 0;
+  school: "abjuration";
+  manaCost: 0;
+  delivery: "zone";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "magick";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "WAVE OF SLICING";
+  slug: "wave-of-slicing";
+  summary: "Target and those nearby take [dice] damage, and nearby cuttable material is shredded.";
+  tags: readonly ["spell", "force", "area"];
+  source: SourceTrace;
+  circle: 0;
+  school: "slicing";
+  manaCost: 0;
+  delivery: "beam";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  attackProfile: {
+     label: "Wave of slicing";
+     mode: "heavy";
+     accuracyBase: 0;
+     damage: DiceExpression;
+     damageType: "slashing";
+     rangeBand: "near";
+  };
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "ENSNARE";
+  slug: "ensnare";
+  summary: "Target is seized by tentacles from beyond space and time for [dice] minutes and may save vs Physique once per minute to break free.";
+  tags: readonly ["spell", "binding", "control"];
+  source: SourceTrace;
+  circle: 0;
+  school: "binding";
+  manaCost: 0;
+  delivery: "zone";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "physique";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "FLY";
+  slug: "fly";
+  summary: "Target may fly up to [sum] feet in the air for [dice] minutes.";
+  tags: readonly ["spell", "movement", "flight"];
+  source: SourceTrace;
+  circle: 0;
+  school: "movement";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "DRAIN LIFE";
+  slug: "drain-life";
+  summary: "Target saves vs Magick or takes [dice] damage and the caster heals half the damage dealt, rounded up; ignores all soaks.";
+  tags: readonly ["spell", "necromancy", "drain"];
+  source: SourceTrace;
+  circle: 0;
+  school: "necromancy";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "magick";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "FLESH BUFF";
+  slug: "flesh-buff";
+  summary: "Target receives [dice] Flesh for [best of] minutes, then takes [dice] damage when the duration ends.";
+  tags: readonly ["spell", "flesh", "buff"];
+  source: SourceTrace;
+  circle: 0;
+  school: "fleshcraft";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "CREATE COINS";
+  slug: "create-coins";
+  summary: "Create [dice] Zennies that disappear in 2d6 hours.";
+  tags: readonly ["spell", "economy", "illusion"];
+  source: SourceTrace;
+  circle: 0;
+  school: "illusion";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "GURGLING SECRET";
+  slug: "gurgling-secret";
+  summary: "Target must make [dice] saves vs Physique; on a failure, they shit themselves.";
+  tags: readonly ["spell", "curse", "body"];
+  source: SourceTrace;
+  circle: 0;
+  school: "curse";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "physique";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "RAINY DAYS";
+  slug: "rainy-days";
+  summary: "Target receives a small cloud that constantly pours rain for [dice]x10 minutes.";
+  tags: readonly ["spell", "weather"];
+  source: SourceTrace;
+  circle: 0;
+  school: "weather";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "SEE-THROUGH";
+  slug: "see-through";
+  summary: "Chosen material becomes mostly transparent for [dice] minutes.";
+  tags: readonly ["spell", "illusion"];
+  source: SourceTrace;
+  circle: 0;
+  school: "illusion";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Short";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "FUTURE-BOLT";
+  slug: "future-bolt";
+  summary: "A projectile is fired into the future and appears in [best of] minutes, dealing [dice] x 2 damage to a random target in the area.";
+  tags: readonly ["spell", "time", "projectile"];
+  source: SourceTrace;
+  circle: 0;
+  school: "temporal";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Short";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "COMMAND";
+  slug: "command";
+  summary: "Target saves vs Magick or must obey all commands from the caster for [best of] hours, with further saves against impossible orders.";
+  tags: readonly ["spell", "control", "mind"];
+  source: SourceTrace;
+  circle: 0;
+  school: "domination";
+  manaCost: 0;
+  delivery: "projectile";
+  rangeDescription: "Medium";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "magick";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "MUTATE";
+  slug: "mutate";
+  summary: "Target rolls [dice] times on the mutation table and the caster chooses one result.";
+  tags: readonly ["spell", "mutation", "xom"];
+  source: SourceTrace;
+  circle: 0;
+  school: "mutation";
+  manaCost: 0;
+  delivery: "touch";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "POISON MIST";
+  slug: "poison-mist";
+  summary: "Requires at least 4 dice to cast. All within a short radius of the wizard are poisoned.";
+  tags: readonly ["spell", "poison", "area"];
+  source: SourceTrace;
+  circle: 0;
+  school: "poison";
+  manaCost: 4;
+  delivery: "zone";
+  rangeDescription: "Touch";
+  castingTime: "Prepared cast or one-turn slow-cast";
+  saveType: "physique";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "ORK-SPAWN";
+  slug: "ork-spawn";
+  summary: "Prepare a pit of rotting flesh and tar that spawns goblins and orks over time; the black tongue is required.";
+  tags: readonly ["spell", "summoning", "darklands"];
+  source: SourceTrace;
+  circle: 0;
+  school: "summoning";
+  manaCost: 0;
+  delivery: "ritual";
+  rangeDescription: "Medium";
+  castingTime: "Ritual preparation";
+  xomRisk: 0;
+}, {
+  kind: "spell";
+  id: Brand<string, "SpellId">;
+  name: "RAISE DEAD";
+  slug: "raise-dead";
+  summary: "Raise [dice] corpses as obedient deadites capable of only the simplest commands; the black tongue is required.";
+  tags: readonly ["spell", "necromancy", "ritual"];
+  source: SourceTrace;
+  circle: 0;
+  school: "necromancy";
+  manaCost: 0;
+  delivery: "ritual";
+  rangeDescription: "Medium";
+  castingTime: "Ritual preparation";
+  xomRisk: 0;
+}];
+```
+
+Defined in: [data/imported/supernatural/spells.ts:6](https://github.com/Gohostieee/finalchud/blob/85a148e8fcb68c528fff24f9dc2939a747ac1005/src/bugchud/data/imported/supernatural/spells.ts#L6)
