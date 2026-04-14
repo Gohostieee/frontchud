@@ -7,18 +7,33 @@ import {
   BUGCHUD_RULESET_VERSION,
   BUGCHUD_SCHEMA_VERSION,
   assertCharacterInitializationRefs,
-  assertCharacterStateIsValid,
   bugchudCore,
   buildCharacterMetadata,
   characterInitializationInputValidator,
   characterStateValidator,
+  characterWizardStepValidator,
   clampListLimit,
+  normalizeCharacterState,
   normalizeSearchText,
+  previewCharacterState,
   requireViewerTokenIdentifier,
+  serializeValidationResult,
   toBugchudCharacterInput,
   toBugchudCharacterState,
   toConvexCharacterState,
 } from "./bugchud";
+
+const characterStatusValidator = v.union(v.literal("draft"), v.literal("complete"));
+
+type CharacterWorkflowStatus = "draft" | "complete";
+type CharacterWizardStep =
+  | "identity"
+  | "lineage"
+  | "background"
+  | "path"
+  | "faith"
+  | "gear"
+  | "review";
 
 const toCharacterSummary = (
   character: Awaited<ReturnType<typeof getCharacterByBugchudId>>,
@@ -31,6 +46,9 @@ const toCharacterSummary = (
     _id: character._id,
     bugchudId: character.bugchudId,
     name: character.name,
+    status: character.status,
+    currentStep: character.currentStep,
+    completedAt: character.completedAt ?? null,
     isArchived: character.isArchived,
     updatedAt: character.updatedAt,
     raceRef: character.state.identity.raceRef,
@@ -52,15 +70,38 @@ const getCharacterByBugchudId = async (
     )
     .unique();
 
+const requireOwnedCharacter = async (
+  ctx: QueryCtx | MutationCtx,
+  ownerTokenIdentifier: string,
+  bugchudId: string,
+) => {
+  const existing = await getCharacterByBugchudId(ctx, ownerTokenIdentifier, bugchudId);
+
+  if (!existing) {
+    throw new Error("Character not found.");
+  }
+  if (existing.ownerTokenIdentifier !== ownerTokenIdentifier) {
+    throw new Error("You do not own this character.");
+  }
+
+  return existing;
+};
+
 const persistCharacter = async (
   ctx: MutationCtx,
   ownerTokenIdentifier: string,
   state: CharacterState,
-  existingId?: Id<"characters">,
+  workflow: {
+    status: CharacterWorkflowStatus;
+    currentStep: CharacterWizardStep;
+    completedAt?: number;
+    existingId?: Id<"characters">;
+    isArchived?: boolean;
+  },
 ) => {
-  assertCharacterStateIsValid(state);
-  const metadata = buildCharacterMetadata(state);
-  const convexState = toConvexCharacterState(state) as unknown as Doc<
+  const normalizedState = normalizeCharacterState(state);
+  const metadata = buildCharacterMetadata(normalizedState);
+  const convexState = toConvexCharacterState(normalizedState) as unknown as Doc<
     "characters"
   >["state"];
   const schemaVersion = BUGCHUD_SCHEMA_VERSION as 1;
@@ -69,15 +110,18 @@ const persistCharacter = async (
     schemaVersion,
     rulesetId: BUGCHUD_RULESET_ID,
     rulesetVersion: BUGCHUD_RULESET_VERSION,
-    isArchived: false,
+    status: workflow.status,
+    currentStep: workflow.currentStep,
+    completedAt: workflow.completedAt,
+    isArchived: workflow.isArchived ?? false,
     updatedAt: Date.now(),
     state: convexState,
     ...metadata,
   };
 
-  if (existingId) {
-    await ctx.db.patch(existingId, value);
-    return ctx.db.get(existingId);
+  if (workflow.existingId) {
+    await ctx.db.patch(workflow.existingId, value);
+    return ctx.db.get(workflow.existingId);
   }
 
   const id = await ctx.db.insert("characters", value);
@@ -89,6 +133,7 @@ export const listMine = query({
     search: v.optional(v.string()),
     includeArchived: v.optional(v.boolean()),
     limit: v.optional(v.number()),
+    status: v.optional(characterStatusValidator),
   },
   handler: async (ctx, args) => {
     const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
@@ -106,10 +151,13 @@ export const listMine = query({
           return includeArchived ? scoped : scoped.eq("isArchived", false);
         });
 
-      return (await searchQuery.take(limit)).map(toCharacterSummary);
+      const results = await searchQuery.take(limit);
+      return results
+        .filter((character) => (args.status ? character.status === args.status : true))
+        .map(toCharacterSummary);
     }
 
-    const characters = includeArchived
+    let characters = includeArchived
       ? await ctx.db
           .query("characters")
           .withIndex("by_ownerTokenIdentifier", (q) =>
@@ -127,6 +175,10 @@ export const listMine = query({
           .order("desc")
           .take(limit);
 
+    if (args.status) {
+      characters = characters.filter((character) => character.status === args.status);
+    }
+
     return characters.map(toCharacterSummary);
   },
 });
@@ -141,6 +193,23 @@ export const getMine = query({
   },
 });
 
+export const previewDraft = query({
+  args: {
+    state: characterStateValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireViewerTokenIdentifier(ctx);
+    const state = toBugchudCharacterState(args.state);
+    const preview = previewCharacterState(state);
+
+    return {
+      normalizedState: preview.normalizedState,
+      validation: serializeValidationResult(preview.validation),
+      combatProfile: preview.combatProfile,
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     input: characterInitializationInputValidator,
@@ -150,7 +219,78 @@ export const create = mutation({
     const input = toBugchudCharacterInput(args.input);
     assertCharacterInitializationRefs(input);
     const state = bugchudCore.createCharacter(input).toState();
-    return persistCharacter(ctx, ownerTokenIdentifier, state);
+
+    return persistCharacter(ctx, ownerTokenIdentifier, state, {
+      status: "complete",
+      currentStep: "review",
+      completedAt: Date.now(),
+    });
+  },
+});
+
+export const createDraft = mutation({
+  args: {
+    input: v.optional(characterInitializationInputValidator),
+  },
+  handler: async (ctx, args) => {
+    const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
+    const input = toBugchudCharacterInput(args.input ?? {});
+    assertCharacterInitializationRefs(input);
+    const state = bugchudCore.createCharacter(input).toState();
+
+    return persistCharacter(ctx, ownerTokenIdentifier, state, {
+      status: "draft",
+      currentStep: "identity",
+    });
+  },
+});
+
+export const saveDraft = mutation({
+  args: {
+    bugchudId: v.string(),
+    state: characterStateValidator,
+    currentStep: characterWizardStepValidator,
+  },
+  handler: async (ctx, args) => {
+    const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
+    const state = toBugchudCharacterState(args.state);
+    const existing = await requireOwnedCharacter(ctx, ownerTokenIdentifier, args.bugchudId);
+
+    if (existing.bugchudId !== state.id) {
+      throw new Error("The provided state does not match the target character.");
+    }
+
+    return persistCharacter(ctx, ownerTokenIdentifier, state, {
+      status: existing.status === "complete" ? "complete" : "draft",
+      currentStep: args.currentStep as CharacterWizardStep,
+      completedAt: existing.completedAt,
+      existingId: existing._id,
+      isArchived: existing.isArchived,
+    });
+  },
+});
+
+export const completeDraft = mutation({
+  args: {
+    bugchudId: v.string(),
+    state: characterStateValidator,
+  },
+  handler: async (ctx, args) => {
+    const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
+    const state = toBugchudCharacterState(args.state);
+    const existing = await requireOwnedCharacter(ctx, ownerTokenIdentifier, args.bugchudId);
+
+    if (existing.bugchudId !== state.id) {
+      throw new Error("The provided state does not match the target character.");
+    }
+
+    return persistCharacter(ctx, ownerTokenIdentifier, state, {
+      status: "complete",
+      currentStep: "review",
+      completedAt: existing.completedAt ?? Date.now(),
+      existingId: existing._id,
+      isArchived: existing.isArchived,
+    });
   },
 });
 
@@ -162,23 +302,19 @@ export const updateState = mutation({
   handler: async (ctx, args) => {
     const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
     const state = toBugchudCharacterState(args.state);
-    const existing = await getCharacterByBugchudId(
-      ctx,
-      ownerTokenIdentifier,
-      args.bugchudId,
-    );
+    const existing = await requireOwnedCharacter(ctx, ownerTokenIdentifier, args.bugchudId);
 
-    if (!existing) {
-      throw new Error("Character not found.");
-    }
-    if (existing.ownerTokenIdentifier !== ownerTokenIdentifier) {
-      throw new Error("You do not own this character.");
-    }
     if (existing.bugchudId !== state.id) {
       throw new Error("The provided state does not match the target character.");
     }
 
-    return persistCharacter(ctx, ownerTokenIdentifier, state, existing._id);
+    return persistCharacter(ctx, ownerTokenIdentifier, state, {
+      status: existing.status,
+      currentStep: existing.currentStep as CharacterWizardStep,
+      completedAt: existing.completedAt,
+      existingId: existing._id,
+      isArchived: existing.isArchived,
+    });
   },
 });
 
@@ -189,18 +325,7 @@ export const archive = mutation({
   },
   handler: async (ctx, args) => {
     const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
-    const existing = await getCharacterByBugchudId(
-      ctx,
-      ownerTokenIdentifier,
-      args.bugchudId,
-    );
-
-    if (!existing) {
-      throw new Error("Character not found.");
-    }
-    if (existing.ownerTokenIdentifier !== ownerTokenIdentifier) {
-      throw new Error("You do not own this character.");
-    }
+    const existing = await requireOwnedCharacter(ctx, ownerTokenIdentifier, args.bugchudId);
 
     await ctx.db.patch(existing._id, {
       isArchived: args.isArchived ?? true,

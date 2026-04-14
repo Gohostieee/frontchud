@@ -1,125 +1,612 @@
 "use client";
 
-import { Authenticated, Unauthenticated, useQuery } from "convex/react";
+import type { ElementType } from "react";
+import Link from "next/link";
+import {
+  ArrowSquareOut,
+  BookOpen,
+  Broadcast,
+  ClockCounterClockwise,
+  GearSix,
+  Lightning,
+  List,
+  Scroll,
+  Skull,
+  Sparkle,
+  TerminalWindow,
+  UserCirclePlus,
+} from "@phosphor-icons/react";
 import {
   SignInButton,
   SignUpButton,
+  SignedIn,
+  SignedOut,
   UserButton,
+  useAuth,
 } from "@clerk/nextjs";
-import { api } from "../convex/_generated/api";
+import { useQuery } from "convex/react";
+
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { api } from "@/convex/_generated/api";
+import { cn } from "@/lib/utils";
+
+const topNavItems = ["Archive", "Rituals", "Conduits"] as const;
+
+const commandItems = [
+  {
+    label: "Characters",
+    hint: "Forge identity",
+    icon: UserCirclePlus,
+    isPrimary: true,
+  },
+  {
+    label: "NPCs",
+    hint: "Summon entities",
+    icon: Skull,
+  },
+  {
+    label: "Grimoire",
+    hint: "Decipher canon",
+    icon: BookOpen,
+  },
+  {
+    label: "Log",
+    hint: "Archive truth",
+    icon: ClockCounterClockwise,
+  },
+] as const;
+
+const fieldNotes = [
+  {
+    cycle: "Cycle 41 // Sector 02",
+    note: "The iron marrow of the city is weeping oil again. The rituals suggest a synchronization error between the gears of reality and the void below.",
+  },
+  {
+    cycle: "Cycle 39 // Sector 12",
+    note: "Encountered a scrap-golem with a human tongue. It kept chanting binary sequences that sounded like prayers. Terminated sequence for safety.",
+  },
+  {
+    cycle: "Cycle 38 // Sector 00",
+    note: "Found a rusted data-slate in the belly of a furnace-beast. The content was encrypted in a language that should not exist for another century.",
+  },
+  {
+    cycle: "Cycle 35 // Sector 09",
+    note: "Beware the Bugchud echo. It mimics the sounds of progress but leads only to recursive loops of logic failure.",
+  },
+] as const;
+
+const teaserModules = [
+  { label: "Encounters", stamp: "Redacted", rotation: "rotate-[11deg]" },
+  { label: "Campaigns", stamp: "Access Denied", rotation: "-rotate-[7deg]" },
+  { label: "World Tools", stamp: "Redacted", rotation: "rotate-[4deg]" },
+] as const;
 
 export default function Home() {
+  const { isSignedIn } = useAuth();
+  const isAuthenticated = Boolean(isSignedIn);
+
   const characterOptions = useQuery(api.ruleset.getCharacterCreationOptions, {});
   const npcOptions = useQuery(api.ruleset.getNpcCreationOptions, {});
 
-  const isLoading = characterOptions === undefined || npcOptions === undefined;
+  const rulesetId =
+    characterOptions?.rulesetId ?? npcOptions?.rulesetId ?? "BUGCHUD_CORE";
+  const rulesetVersion =
+    characterOptions?.rulesetVersion ?? npcOptions?.rulesetVersion ?? "sync-pending";
+
+  const characterSummary = characterOptions
+    ? `${characterOptions.races.length} races // ${characterOptions.origins.length} origins // ${characterOptions.backgrounds.length} backgrounds`
+    : "Synchronizing canonical race and origin matrices.";
+  const npcSummary = npcOptions
+    ? `${npcOptions.creatures.length} creatures // ${npcOptions.npcLoadouts.length} loadouts`
+    : "Reading creature taxonomy from the imported grimoire.";
+
+  const moduleCards = [
+    {
+      title: "Create Character",
+      sequence: "Sequence 001 // Forge identity",
+      summary: characterSummary,
+      icon: UserCirclePlus,
+      href: "/characters/new",
+    },
+    {
+      title: "NPC Manager",
+      sequence: "Sequence 002 // Summon entities",
+      summary: npcSummary,
+      icon: Skull,
+    },
+    {
+      title: "Ruleset Explorer",
+      sequence: "Sequence 003 // Decipher logic",
+      summary: `${rulesetId} // v${rulesetVersion}`,
+      icon: Scroll,
+    },
+    {
+      title: "Session Log",
+      sequence: "Sequence 004 // Archive truth",
+      summary: isAuthenticated
+        ? "Authenticated conduit detected. Protected manager handoff primed."
+        : "Sign in to cross the protected archive threshold.",
+      icon: ClockCounterClockwise,
+    },
+  ] as const;
+
+  const terminalFeed = [
+    `[INFO] IMPORTING RULESET: ${rulesetId}.HEX`,
+    `[INFO] CHARACTER OPTIONS: ${characterOptions ? `${characterOptions.races.length} RACES / ${characterOptions.origins.length} ORIGINS / ${characterOptions.backgrounds.length} BACKGROUNDS` : "PENDING"}`,
+    `[INFO] NPC OPTIONS: ${npcOptions ? `${npcOptions.creatures.length} CREATURES / ${npcOptions.npcLoadouts.length} LOADOUTS` : "PENDING"}`,
+    isAuthenticated
+      ? "[SUCCESS] CLERK SESSION VERIFIED. MANAGER CONDUIT OPEN."
+      : "[WARN] UNSEALED VISITOR STATE. AUTH REQUIRED FOR MANAGER ACCESS.",
+    "[ERROR] CRITICAL BREACH IN 'WORLD_TOOLS' MODULE. ACCESS REVOKED.",
+  ] as const;
 
   return (
-    <>
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-background px-4 py-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">
-            Frontchud
-          </p>
-          <h1 className="text-xl font-semibold">BUGCHUD manager backend</h1>
-        </div>
-        <UserButton />
-      </header>
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
-        <section className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-6">
-          <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-            Snapshot-first Convex foundation
-          </p>
-          <h2 className="text-3xl font-semibold text-slate-950">
-            Characters and NPCs now have a real BUGCHUD persistence layer.
-          </h2>
-          <p className="max-w-3xl text-sm leading-6 text-slate-700">
-            The app now reads canonical creation data from the imported BUGCHUD
-            ruleset and stores live character or NPC state in Convex-ready
-            snapshot tables. The richer manager UI can build on top of these
-            queries and mutations next.
-          </p>
-        </section>
+    <div className="relative min-h-screen overflow-x-clip">
+      <div className="grain-overlay pointer-events-none fixed inset-0 z-0" />
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <StatCard
-            label="Character creation options"
-            value={
-              isLoading
-                ? "Loading..."
-                : `${characterOptions.races.length} races / ${characterOptions.origins.length} origins / ${characterOptions.backgrounds.length} backgrounds`
-            }
-            detail={
-              isLoading
-                ? "Fetching imported ruleset data."
-                : `Ruleset ${characterOptions.rulesetId} v${characterOptions.rulesetVersion}`
-            }
-          />
-          <StatCard
-            label="NPC creation options"
-            value={
-              isLoading
-                ? "Loading..."
-                : `${npcOptions.creatures.length} creatures / ${npcOptions.npcLoadouts.length} loadouts`
-            }
-            detail={
-              isLoading
-                ? "Fetching imported GM content."
-                : `Ruleset ${npcOptions.rulesetId} v${npcOptions.rulesetVersion}`
-            }
-          />
-        </section>
+      <Header isAuthenticated={isAuthenticated} />
 
-        <Authenticated>
-          <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-sm leading-6 text-emerald-950">
-            Clerk is active in the frontend. Once `CLERK_JWT_ISSUER_DOMAIN` is
-            configured on the Convex deployment, the new owner-scoped character
-            and NPC APIs will enforce `identity.tokenIdentifier` on every read
-            and write.
-          </section>
-        </Authenticated>
+      <DesktopCommandRail
+        isAuthenticated={isAuthenticated}
+        rulesetVersion={rulesetVersion}
+      />
 
-        <Unauthenticated>
-          <section className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 md:max-w-md">
-            <p className="text-sm text-slate-700">
-              Sign in to use the future manager UI once the Convex Clerk issuer
-              is configured.
-            </p>
-            <div className="flex gap-3">
-              <SignInButton mode="modal">
-                <button className="rounded-full bg-slate-950 px-4 py-2 text-sm text-white">
-                  Sign in
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-900">
-                  Sign up
-                </button>
-              </SignUpButton>
+      <main className="relative z-10 px-4 pb-28 pt-24 lg:ml-72 lg:px-10 lg:pt-28">
+        <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-12">
+          <section className="relative flex min-h-[calc(100svh-13rem)] flex-col justify-center overflow-hidden border-l border-primary/20 pl-6 lg:pl-10">
+            <div className="status-rune absolute left-[-6px] top-5 size-3 bg-primary" />
+            <div className="absolute inset-y-12 right-0 hidden w-[28rem] bg-[radial-gradient(circle_at_center,_rgba(255,176,0,0.16),_transparent_65%)] blur-3xl lg:block" />
+
+            <div className="relative flex max-w-5xl flex-col gap-6">
+              <p className="font-mono text-[0.72rem] uppercase tracking-[0.48em] text-muted-foreground">
+                Command hub // public ingress node
+              </p>
+
+              <h1 className="hero-title max-w-6xl font-display text-[4.5rem] leading-[0.9] font-black tracking-[-0.08em] text-primary sm:text-[6rem] lg:text-[8.8rem]">
+                FRONTCHUD
+              </h1>
+
+              <div className="flex max-w-3xl flex-col gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-sans text-sm uppercase tracking-[0.34em] text-accent">
+                    The Bugchud operations hub
+                  </span>
+                  <span className="hidden h-px flex-1 ghost-divider lg:block" />
+                </div>
+
+                <p className="max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
+                  {isAuthenticated
+                    ? "Clerk has verified this operator. Step through the protected manager conduit to inspect imported rulesets, shape characters, and monitor active ritual state."
+                    : "An ancient interface for modern grimoires. Manage characters, summon NPCs, and navigate the imported BUGCHUD canon through a ritualistic digital lens."}
+                </p>
+
+                <div className="flex flex-wrap gap-3 text-[0.72rem] uppercase tracking-[0.34em] text-muted-foreground">
+                  <span>{rulesetId}</span>
+                  <span className="text-primary">v{rulesetVersion}</span>
+                  <span>{isAuthenticated ? "Session sealed" : "Public visitor mode"}</span>
+                </div>
+              </div>
+
+              <HeroActions isAuthenticated={isAuthenticated} />
             </div>
           </section>
-        </Unauthenticated>
+
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_23rem]">
+            <div className="flex min-w-0 flex-col gap-10">
+              <section className="grid gap-5 md:grid-cols-2">
+                {moduleCards.map((card) => (
+                  <ModuleCard key={card.title} {...card} />
+                ))}
+              </section>
+
+              <section
+                id="system-feed"
+                className="module-cut ritual-surface relative overflow-hidden border-l-4 border-primary px-6 py-7 sm:px-8"
+              >
+                <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,_rgba(255,176,0,0.08),_transparent_72%)] blur-2xl" />
+                <div className="relative flex flex-col gap-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="status-rune size-2 bg-primary" />
+                      <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.32em] text-accent">
+                        System Integrity
+                      </h2>
+                    </div>
+                    <div className="terminal-copy text-[0.65rem] text-muted-foreground">
+                      Encryption: active
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {terminalFeed.map((line) => (
+                      <p
+                        key={line}
+                        className={cn(
+                          "terminal-copy text-[0.7rem] leading-6 text-accent/75 sm:text-xs",
+                          line.includes("[ERROR]") && "text-secondary",
+                          line.includes("[WARN]") && "text-accent",
+                          line.includes("[SUCCESS]") && "text-foreground",
+                        )}
+                      >
+                        {`> ${line}`}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid gap-4 md:grid-cols-3">
+                {teaserModules.map((item) => (
+                  <article
+                    key={item.label}
+                    className="ritual-surface-strong relative flex h-36 overflow-hidden border border-border/15 p-4"
+                  >
+                    <div
+                      className={cn(
+                        "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-xl font-black uppercase tracking-[0.48em] text-secondary/90 sm:text-2xl",
+                        item.rotation,
+                      )}
+                    >
+                      {item.stamp}
+                    </div>
+                    <span className="mt-auto font-mono text-[0.62rem] uppercase tracking-[0.3em] text-muted-foreground">
+                      {item.label}
+                    </span>
+                  </article>
+                ))}
+              </section>
+            </div>
+
+            <aside className="min-w-0">
+              <section className="ritual-surface-strong sticky top-28 flex max-h-[calc(100svh-10rem)] flex-col overflow-hidden">
+                <div className="flex items-center justify-between bg-card px-5 py-4">
+                  <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.34em] text-secondary">
+                    Field Notes
+                  </h2>
+                  <Broadcast className="size-5 text-secondary" weight="fill" />
+                </div>
+
+                <div className="flex flex-col gap-6 overflow-y-auto px-5 py-6">
+                  {fieldNotes.map((entry, index) => (
+                    <article key={entry.cycle} className="flex flex-col gap-3">
+                      <time className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
+                        {entry.cycle}
+                      </time>
+                      <p className="text-base leading-7 text-foreground/88 italic">
+                        &ldquo;{entry.note}&rdquo;
+                      </p>
+                      {index < fieldNotes.length - 1 ? (
+                        <Separator className="ghost-divider opacity-35" />
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+
+                <div className="mt-auto border-t border-border/20 bg-background px-5 py-4">
+                  <div className="flex items-center justify-between bg-card px-4 py-3">
+                    <div className="flex items-end gap-1">
+                      <span className="h-3 w-1 bg-primary/30" />
+                      <span className="h-4 w-1 bg-primary/55" />
+                      <span className="h-5 w-1 bg-primary" />
+                    </div>
+                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
+                      Feed stabilized
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
       </main>
-    </>
+
+      <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/20 bg-sidebar/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-3 px-4 py-2 lg:px-6">
+          <div className="font-mono text-[0.62rem] uppercase tracking-[0.34em] text-secondary">
+            System_uptime: 432:12:09 // active_rituals: 03
+          </div>
+          <div className="flex flex-wrap items-center gap-5 font-mono text-[0.62rem] uppercase tracking-[0.32em] text-secondary">
+            <span>Diagnostics</span>
+            <span>Terminal_Feed</span>
+            <span>Node_Status</span>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  detail,
+function Header({ isAuthenticated }: { isAuthenticated: boolean }) {
+  return (
+    <header className="fixed inset-x-0 top-0 z-40 border-b border-border/20 bg-background/88 backdrop-blur-xl">
+      <div className="mx-auto flex h-20 max-w-[110rem] items-center justify-between gap-4 px-4 lg:px-6">
+        <div className="flex items-center gap-3">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                aria-label="Open command rail"
+              >
+                <List data-icon="inline-start" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              className="w-[88vw] max-w-sm border-r border-border/30 bg-sidebar px-0 text-sidebar-foreground"
+            >
+              <SheetHeader className="border-b border-border/20 px-6 py-5">
+                <SheetTitle className="sr-only">Frontchud command rail</SheetTitle>
+                <div className="flex flex-col gap-1">
+                  <span className="font-display text-3xl font-black uppercase tracking-[0.18em] text-primary">
+                    Frontchud
+                  </span>
+                  <span className="font-mono text-[0.68rem] uppercase tracking-[0.34em] text-muted-foreground">
+                    Command_Hub // v0.9.4-beta
+                  </span>
+                </div>
+              </SheetHeader>
+              <div className="flex h-full flex-col">
+                <div className="flex flex-col gap-2 px-3 py-4">
+                  {commandItems.map((item) => (
+                    <CommandItem key={item.label} {...item} compact />
+                  ))}
+                </div>
+                <div className="mt-auto border-t border-border/20 px-4 py-4">
+                  <ManagerAccessButton
+                    isAuthenticated={isAuthenticated}
+                    fullWidth
+                    label="Access Manager"
+                  />
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <div className="flex flex-col">
+            <span className="font-display text-3xl font-black uppercase tracking-[0.14em] text-primary">
+              Frontchud
+            </span>
+          </div>
+        </div>
+
+        <nav className="hidden items-center gap-8 lg:flex">
+          {topNavItems.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="font-sans text-sm uppercase tracking-[0.28em] text-muted-foreground transition-colors hover:text-accent"
+            >
+              {item}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden items-center gap-2 text-primary sm:flex">
+            <span className="flex size-9 items-center justify-center bg-card">
+              <GearSix className="size-5" weight="fill" />
+            </span>
+            <span className="flex size-9 items-center justify-center bg-card">
+              <TerminalWindow className="size-5" weight="fill" />
+            </span>
+          </div>
+
+          <SignedOut>
+            <SignInButton mode="modal">
+              <Button variant="outline" size="sm">
+                <ArrowSquareOut data-icon="inline-end" />
+                <span className="uppercase tracking-[0.3em]">Enter</span>
+              </Button>
+            </SignInButton>
+          </SignedOut>
+
+          <SignedIn>
+            <UserButton />
+          </SignedIn>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function DesktopCommandRail({
+  isAuthenticated,
+  rulesetVersion,
 }: {
-  label: string;
-  value: string;
-  detail: string;
+  isAuthenticated: boolean;
+  rulesetVersion: string;
 }) {
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-6">
-      <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-3 text-2xl font-semibold text-slate-950">{value}</p>
-      <p className="mt-2 text-sm text-slate-600">{detail}</p>
+    <aside className="ritual-surface-strong fixed bottom-8 left-0 top-20 z-30 hidden w-72 flex-col border-r border-border/20 lg:flex">
+      <div className="border-b border-border/20 px-6 py-6">
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[0.72rem] uppercase tracking-[0.34em] text-primary">
+            Command_Hub
+          </span>
+          <span className="font-mono text-[0.66rem] uppercase tracking-[0.28em] text-muted-foreground">
+            v0.9.4-beta // ruleset {rulesetVersion}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 px-3 py-4">
+        {commandItems.map((item) => (
+          <CommandItem key={item.label} {...item} />
+        ))}
+      </div>
+
+      <div className="border-t border-border/20 px-4 py-4">
+        <ManagerAccessButton
+          isAuthenticated={isAuthenticated}
+          fullWidth
+          label={isAuthenticated ? "Open Manager" : "Initiate Ritual"}
+        />
+      </div>
+    </aside>
+  );
+}
+
+function CommandItem({
+  icon: Icon,
+  label,
+  hint,
+  isPrimary = false,
+  compact = false,
+}: {
+  icon: ElementType;
+  label: string;
+  hint: string;
+  isPrimary?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-4 px-4 py-4 transition-colors",
+        compact ? "py-3" : "",
+        isPrimary
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-card hover:text-accent",
+      )}
+    >
+      <Icon className="size-5 shrink-0" weight={isPrimary ? "fill" : "regular"} />
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="truncate font-sans text-xs uppercase tracking-[0.3em]">
+          {label}
+        </span>
+        <span className="font-mono text-[0.58rem] uppercase tracking-[0.28em] opacity-70">
+          {hint}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
+  if (isAuthenticated) {
+    return (
+      <div className="flex flex-wrap gap-3 pt-4">
+        <Button asChild size="lg">
+          <Link href="/characters/new">
+            <Sparkle data-icon="inline-end" />
+            <span className="uppercase tracking-[0.28em]">Initiate Character</span>
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="lg">
+          <a href="#system-feed">
+            <TerminalWindow data-icon="inline-end" />
+            <span className="uppercase tracking-[0.28em]">Review Feed</span>
+          </a>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-3 pt-4">
+      <SignUpButton mode="modal">
+        <Button size="lg">
+          <Sparkle data-icon="inline-end" />
+          <span className="uppercase tracking-[0.28em]">Initiate Character</span>
+        </Button>
+      </SignUpButton>
+      <SignInButton mode="modal">
+        <Button variant="outline" size="lg">
+          <ArrowSquareOut data-icon="inline-end" />
+          <span className="uppercase tracking-[0.28em]">Access Manager</span>
+        </Button>
+      </SignInButton>
+    </div>
+  );
+}
+
+function ManagerAccessButton({
+  isAuthenticated,
+  fullWidth = false,
+  label,
+  detail,
+}: {
+  isAuthenticated: boolean;
+  fullWidth?: boolean;
+  label: string;
+  detail?: string;
+}) {
+  const className = cn(fullWidth && "w-full");
+
+  if (isAuthenticated) {
+    return (
+      <Button asChild className={className}>
+        <Link href="/server">
+          <Lightning data-icon="inline-end" />
+          <span className="uppercase tracking-[0.28em]">{label}</span>
+          {detail ? <span className="sr-only">{detail}</span> : null}
+        </Link>
+      </Button>
+    );
+  }
+
+  return (
+    <SignInButton mode="modal">
+      <Button className={className}>
+        <Lightning data-icon="inline-end" />
+        <span className="uppercase tracking-[0.28em]">{label}</span>
+      </Button>
+    </SignInButton>
+  );
+}
+
+function ModuleCard({
+  title,
+  sequence,
+  summary,
+  icon: Icon,
+  href,
+}: {
+  title: string;
+  sequence: string;
+  summary: string;
+  icon: ElementType;
+  href?: string;
+}) {
+  const content = (
+    <article className="module-cut ritual-surface-strong group relative overflow-hidden p-7">
+      <div className="absolute right-5 top-5 text-primary/25 transition-colors duration-200 group-hover:text-primary/50">
+        <Icon className="size-7" weight="fill" />
+      </div>
+
+      <div className="flex flex-col gap-5">
+        <span className="h-1.5 w-14 bg-primary" />
+        <div className="flex flex-col gap-3">
+          <h2 className="font-display text-3xl font-bold tracking-[-0.04em] text-card-foreground">
+            {title}
+          </h2>
+          <p className="font-mono text-[0.68rem] uppercase tracking-[0.26em] text-muted-foreground">
+            {sequence}
+          </p>
+        </div>
+        <Separator className="ghost-divider opacity-35" />
+        <p className="text-sm leading-7 text-muted-foreground">{summary}</p>
+      </div>
     </article>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

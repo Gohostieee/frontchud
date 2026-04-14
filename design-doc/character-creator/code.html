@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;800;900&amp;family=Space+Grotesk:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#ffddaf",
+                        "surface-variant": "#353534",
+                        "secondary-fixed": "#ffdad4",
+                        "tertiary-container": "#ffaa9d",
+                        "surface-container-highest": "#353534",
+                        "surface-container": "#201f1f",
+                        "secondary-fixed-dim": "#ffb4a8",
+                        "on-primary": "#432c00",
+                        "error-container": "#93000a",
+                        "inverse-surface": "#e5e2e1",
+                        "on-secondary": "#690000",
+                        "on-primary-fixed": "#281800",
+                        "error": "#ffb4ab",
+                        "on-primary-container": "#6a4700",
+                        "surface-tint": "#ffba43",
+                        "primary": "#ffd597",
+                        "tertiary": "#ffd1ca",
+                        "on-surface": "#e5e2e1",
+                        "inverse-on-surface": "#313030",
+                        "on-tertiary": "#620f08",
+                        "tertiary-fixed": "#ffdad4",
+                        "outline-variant": "#524533",
+                        "tertiary-fixed-dim": "#ffb4a8",
+                        "surface": "#131313",
+                        "on-background": "#e5e2e1",
+                        "on-primary-fixed-variant": "#614000",
+                        "surface-bright": "#3a3939",
+                        "surface-dim": "#131313",
+                        "on-tertiary-container": "#8c2e22",
+                        "on-tertiary-fixed-variant": "#82271c",
+                        "on-secondary-fixed-variant": "#920703",
+                        "on-secondary-fixed": "#410000",
+                        "inverse-primary": "#805600",
+                        "secondary": "#ffb4a8",
+                        "primary-fixed-dim": "#ffba43",
+                        "on-secondary-container": "#ff9a8a",
+                        "on-error": "#690005",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-low": "#1c1b1b",
+                        "on-surface-variant": "#d7c4ac",
+                        "primary-container": "#ffb000",
+                        "outline": "#9f8e78",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface-container-high": "#2a2a2a",
+                        "secondary-container": "#920703",
+                        "background": "#131313",
+                        "on-tertiary-fixed": "#410000"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0px",
+                        "lg": "0px",
+                        "xl": "0px",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Epilogue"],
+                        "body": ["Space Grotesk"],
+                        "label": ["Space Grotesk"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>.material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24
+    }
+.grain-overlay {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuCHXHbr8QpBmd85ODQB2vQ36-UZavrIYaQm8FnMTNJmSuqKdFdgfx5Tt-WTuj2lld4L3lP0kiOj5pTbpyamd_pns36gOifU1pOPvdtyu8S09LaBMNZwwSWDVGkk-bnOGJyPGsk0T2DZrSdVc9BcWQ5Hp58nO5QcraruoqPeNk7e-650m0xF7wuQtvRDu42_6X8Yx5sRqHrOA_xzNftP2gTNXSkS7ZXiecJglANTTIzV-6yLKuKw0kQDdVGbQ_CLi0jhyjNQJ9hsWA);
+    opacity: 0.03;
+    pointer-events: none
+    }
+.grid-bg {
+    background-image: radial-gradient(circle, #524533 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.1
+    }
+.scanline {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #ffba43, transparent);
+    box-shadow: 0 0 8px #ffba43
+    }
+::-webkit-scrollbar {
+    width: 4px
+    }
+::-webkit-scrollbar-track {
+    background: #0e0e0e
+    }
+::-webkit-scrollbar-thumb {
+    background: #353534
+    }</style>
+</head>
+<body class="bg-surface font-body text-on-background overflow-hidden selection:bg-primary-container selection:text-on-primary-fixed">
+<div class="fixed inset-0 grid-bg pointer-events-none"></div>
+<div class="fixed inset-0 grain-overlay pointer-events-none"></div>
+<!-- Top Navigation -->
+<header class="flex justify-between items-center w-full px-6 py-4 bg-[#131313] z-50 fixed top-0 border-b-0">
+<div class="text-2xl font-black text-[#ffb000] tracking-widest font-['Epilogue'] tracking-tighter uppercase">FRONTCHUD</div>
+<nav class="hidden md:flex gap-8">
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">IDENTITY</a>
+<a class="text-[#ffb000] border-b-2 border-[#ffb000] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">LINEAGE</a>
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">BACKGROUND</a>
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">PATH</a>
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">FAITH</a>
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">GEAR</a>
+<a class="text-[#9f8e78] pb-1 font-['Epilogue'] tracking-tighter uppercase hover:text-[#ffd597] transition-colors" href="#">REVIEW</a>
+</nav>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors">settings</span>
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors">terminal</span>
+</div>
+</header>
+<main class="flex h-screen pt-[64px]">
+<!-- Left: The Sequence -->
+<aside class="flex flex-col h-screen fixed left-0 top-0 z-40 bg-[#0e0e0e] w-64 border-r-0 pt-20">
+<div class="px-6 mb-8">
+<h2 class="text-[#ffb000] font-bold font-['Space_Grotesk'] uppercase text-xs tracking-widest">THE SEQUENCE</h2>
+<p class="text-outline text-[10px] tracking-[0.2em]">INITIATING RITUAL</p>
+</div>
+<nav class="flex-1">
+<!-- Step 1: Complete -->
+<div class="text-[#9f8e78] px-4 py-3 flex items-center gap-4 hover:bg-[#353534] hover:text-[#ffb000] cursor-pointer transition-all">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Identity</span>
+</div>
+<!-- Step 2: Active -->
+<div class="bg-[#ffb000] text-[#281800] font-bold px-4 py-3 flex items-center gap-4 translate-x-1 duration-200">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Lineage</span>
+</div>
+<!-- Steps 3-7: Locked/Inactive -->
+<div class="text-[#524533] px-4 py-3 flex items-center gap-4">
+<span class="material-symbols-outlined">history</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Background</span>
+</div>
+<div class="text-[#524533] px-4 py-3 flex items-center gap-4">
+<span class="material-symbols-outlined">alt_route</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Path</span>
+</div>
+<div class="text-[#524533] px-4 py-3 flex items-center gap-4">
+<span class="material-symbols-outlined">auto_awesome</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Faith</span>
+</div>
+<div class="text-[#524533] px-4 py-3 flex items-center gap-4">
+<span class="material-symbols-outlined">architecture</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Gear</span>
+</div>
+<div class="text-[#524533] px-4 py-3 flex items-center gap-4">
+<span class="material-symbols-outlined">visibility</span>
+<span class="font-['Space_Grotesk'] uppercase text-xs tracking-widest">Review</span>
+</div>
+</nav>
+<div class="p-6 mt-auto border-t border-outline-variant/20">
+<div class="flex items-center gap-2 mb-4">
+<div class="w-8 h-8 bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">fingerprint</span>
+</div>
+<div>
+<p class="text-[10px] text-outline">v0.9.4-BETA</p>
+<p class="text-[10px] text-primary-container">BUGCHUD_V2</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Center: The Forge -->
+<section class="ml-64 mr-80 flex-1 overflow-y-auto px-12 py-12">
+<div class="max-w-4xl mx-auto">
+<div class="mb-12">
+<span class="text-primary-container font-headline font-black text-6xl tracking-tighter block mb-2">LINEAGE SELECTION</span>
+<div class="scanline mb-4"></div>
+<p class="text-outline font-body max-w-xl">Determine the core biological and spiritual origin of your construct. Lineage dictates base attributes and inherent ritual compatibility.</p>
+</div>
+<!-- High Density Selection Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Item 1: Selected -->
+<div class="bg-surface-container-low border border-primary-container/50 p-6 relative group shadow-[0_0_15px_rgba(255,176,0,0.1)]">
+<div class="absolute top-0 left-0 w-2 h-2 bg-primary-container"></div>
+<div class="absolute bottom-0 right-0 w-2 h-2 bg-primary-container"></div>
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-primary-container font-headline font-bold text-2xl tracking-tight uppercase">VOID-BORN</h3>
+<p class="text-[10px] font-bold text-outline uppercase tracking-widest">Origin: Deep Extraction</p>
+</div>
+<span class="material-symbols-outlined text-primary-container" style="font-variation-settings: 'FILL' 1;">deployed_code</span>
+</div>
+<div class="mb-6 h-32 overflow-hidden bg-surface-container-lowest">
+<img class="w-full h-full object-cover opacity-60 grayscale hover:grayscale-0 transition-all duration-500" data-alt="Abstract dark cinematic view of a crystalline entity submerged in thick black liquid with amber glowing veins" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSwuExA_I9_c1SbS3YH1wM9BGE63puwMOg6w8uCB7tvfiA2-U1I02qOrU1JGfiF1tTb9iT5BmNA-DTGlwRSRbxMS2znyNRUDg183fg2NQFekl6CBfzDUp484uOLryEZd2CXMzFF7-tl_2c4vZ8DEFBCEKT5sVRLY4FqNdF10luHEWGioRPVOEVd6ZzbiBQdYzn5e-XEj4BUHzCgajPBbNtITLI2491lhVM_AXuHg_KARo7ToTqrdNjGHH888q3aeXDKWNVWixC5A"/>
+</div>
+<div class="space-y-4">
+<div class="text-[11px] font-body text-on-surface leading-relaxed border-l border-primary-container/30 pl-3">
+                                Entities recovered from the substructure of the Obsidian Void. They lack traditional biological components, replaced by semi-solid ritual resonant material.
+                            </div>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container-lowest p-2">
+<p class="text-[9px] text-outline uppercase">Resonance</p>
+<p class="text-primary-container font-bold">+15%</p>
+</div>
+<div class="bg-surface-container-lowest p-2">
+<p class="text-[9px] text-outline uppercase">Stability</p>
+<p class="text-secondary-container font-bold">-08%</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container border border-outline-variant/30 p-6 relative group hover:border-primary/50 transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-outline font-headline font-bold text-2xl tracking-tight uppercase group-hover:text-primary transition-colors">IRON-KIN</h3>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest">Origin: Industrial Womb</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">precision_manufacturing</span>
+</div>
+<div class="mb-6 h-32 overflow-hidden bg-surface-container-lowest">
+<img class="w-full h-full object-cover opacity-40 grayscale group-hover:opacity-60 transition-all" data-alt="Heavy industrial machinery macro shot with rusted steel plates and orange sparks in a dark environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfRJbDcBAF2VA0sWv-HmEA5Kvxxm1JYXgppJt6fInGDtLlzZnI3_VBOvsehHlFiwf6zUx_zj26uC6fw7rgAr5XF_HqrbVFwdOeMw7iZDtLcQdlvj9gesD74EC4q-eLSSpcM-kpvsy2hmYjpDbPnJ2oYtKUiiTaFWfqRcvX6y0unmI13OPOmZmirPu_62IHVa8osJKiOdFg775zqKC3QhWkhO9QuoqXsH0o-bQXnjhwJBZHdzSUemNdloXyAXuN5O153I1JYZYBSg"/>
+</div>
+<div class="space-y-4">
+<p class="text-[11px] font-body text-outline/60 leading-relaxed italic">
+                                "Forged in the heart of the automated foundries, these constructs are built for endurance and structural integrity."
+                            </p>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container-lowest p-2">
+<p class="text-[9px] text-outline-variant uppercase">Resonance</p>
+<p class="text-outline font-bold">+02%</p>
+</div>
+<div class="bg-surface-container-lowest p-2">
+<p class="text-[9px] text-outline-variant uppercase">Stability</p>
+<p class="text-outline font-bold">+20%</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-surface-container border border-outline-variant/30 p-6 relative group hover:border-primary/50 transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-outline font-headline font-bold text-2xl tracking-tight uppercase group-hover:text-primary transition-colors">FLESH-WEAVER</h3>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest">Origin: Biological Graft</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">biotech</span>
+</div>
+<div class="space-y-4">
+<p class="text-[11px] font-body text-outline/60 leading-relaxed italic">
+                                Bio-engineered survivors using archaic gene-editing rituals to sustain life in the waste.
+                            </p>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="bg-surface-container border border-outline-variant/30 p-6 relative group hover:border-primary/50 transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-outline font-headline font-bold text-2xl tracking-tight uppercase group-hover:text-primary transition-colors">ECHO-SYSTEM</h3>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest">Origin: Neural Ghost</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">memory</span>
+</div>
+<div class="space-y-4">
+<p class="text-[11px] font-body text-outline/60 leading-relaxed italic">
+                                Pure data constructs projecting themselves through archaic terminal hardware.
+                            </p>
+</div>
+</div>
+</div>
+<div class="mt-12 flex justify-between items-center border-t border-outline-variant/30 pt-8">
+<button class="px-8 py-3 bg-surface-container-high text-outline text-xs font-bold uppercase tracking-widest hover:text-primary transition-colors">Return to Identity</button>
+<button class="px-12 py-3 bg-primary-container text-on-primary-fixed text-sm font-bold uppercase tracking-[0.3em] flex items-center gap-4 group">
+                        Confirm Lineage
+                        <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_right_alt</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Right: The Dossier -->
+<aside class="flex flex-col h-screen fixed right-0 top-0 z-40 bg-[#1c1b1b] w-80 border-l-0 pt-20 shadow-[0_0_20px_rgba(255,186,67,0.05)]">
+<div class="px-6 mb-6">
+<div class="flex justify-between items-end mb-1">
+<h2 class="text-[#920703] font-headline font-black text-3xl tracking-tighter">DOSSIER</h2>
+<span class="text-[#920703] text-[10px] font-['Space_Grotesk'] font-bold">LIVE DATA STREAM</span>
+</div>
+<div class="h-[2px] bg-secondary-container w-full"></div>
+</div>
+<div class="flex-1 overflow-y-auto px-6 space-y-8 pb-12">
+<!-- Section: Core -->
+<div class="space-y-4">
+<div class="flex items-center gap-4">
+<div class="w-16 h-16 bg-surface-container-lowest border border-outline-variant/30 flex items-center justify-center p-1">
+<img class="w-full h-full object-cover grayscale opacity-80" data-alt="Close-up moody cinematic portrait of a character with mechanical eye implants and glowing circuitry skin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2YI5oFSa1F7B-NwWpnS-Chpur3a222hAr5Tdvblxm3jAEFwbDlu9-k1g4eiuXu-jHnskhVNoUJG7y87uj3fqSkL2isqGxmaHct-AG-QheKri-U9gORfVAQrRvFwV7sH2hPYZBDQoB1e_sM7hjtoE4ZfvBIv323aoPHbyexaw8pXnZK7pLDRwHHk5r3DyaQgANjZO58c2o7dr4YAymjG8JAEQZcuRLwIHfdBIP7w5qnp_OW5TBDemKqbUB7Grm6TVm7oGqpQxSGw"/>
+</div>
+<div>
+<p class="text-[10px] text-outline-variant uppercase font-bold tracking-widest">Subject ID</p>
+<p class="text-primary font-headline font-bold text-lg uppercase leading-none">V0ID_RUNNER_99</p>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[11px]">
+<span class="text-outline-variant uppercase">Lineage:</span>
+<span class="text-primary-container font-bold uppercase">VOID-BORN</span>
+</div>
+<div class="flex justify-between text-[11px]">
+<span class="text-outline-variant uppercase">Background:</span>
+<span class="text-[#524533] font-bold uppercase tracking-widest bg-surface-container-lowest px-1">REDACTED</span>
+</div>
+<div class="flex justify-between text-[11px]">
+<span class="text-outline-variant uppercase">Path:</span>
+<span class="text-[#524533] font-bold uppercase tracking-widest bg-surface-container-lowest px-1">PENDING</span>
+</div>
+</div>
+</div>
+<!-- Section: Attributes -->
+<div class="space-y-4">
+<p class="text-[10px] text-outline uppercase font-bold tracking-[0.2em] flex items-center gap-2">
+<span class="w-2 h-2 bg-secondary-container"></span>
+                        PARAMETER_DUMP
+                    </p>
+<div class="space-y-3">
+<div>
+<div class="flex justify-between text-[10px] mb-1">
+<span class="text-outline">RESONANCE</span>
+<span class="text-primary-container">84/100</span>
+</div>
+<div class="h-1 bg-surface-container-lowest w-full">
+<div class="h-full bg-primary-container" style="width: 84%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] mb-1">
+<span class="text-outline">STABILITY</span>
+<span class="text-secondary-container">42/100</span>
+</div>
+<div class="h-1 bg-surface-container-lowest w-full">
+<div class="h-full bg-secondary-container" style="width: 42%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] mb-1 text-outline-variant">
+<span class="uppercase">Hardware Sync</span>
+<span>-- / --</span>
+</div>
+<div class="h-1 bg-surface-container-lowest w-full opacity-20"></div>
+</div>
+</div>
+</div>
+<!-- Section: Inventory/Traits -->
+<div class="space-y-4">
+<p class="text-[10px] text-outline uppercase font-bold tracking-[0.2em] flex items-center gap-2">
+<span class="w-2 h-2 bg-primary-container"></span>
+                        TRAIT_INVENTORY
+                    </p>
+<div class="space-y-2">
+<div class="bg-surface-container-lowest p-2 border-l-2 border-primary-container">
+<p class="text-[10px] text-primary font-bold uppercase">Sub-Space Drift</p>
+<p class="text-[9px] text-outline-variant leading-tight">Can bypass physical barriers for 0.5s during ritual overload.</p>
+</div>
+<div class="bg-surface-container-lowest/50 p-2 border-l-2 border-outline-variant/30">
+<p class="text-[10px] text-outline-variant font-bold uppercase">Corrupted Link</p>
+<p class="text-[9px] text-outline-variant/60 leading-tight">Incoming data signals cause mental structural decay.</p>
+</div>
+</div>
+</div>
+<!-- Footer Terminal -->
+<div class="mt-8 bg-surface-container-lowest p-3 border border-outline-variant/20 font-mono text-[9px] text-primary-container opacity-60">
+<p class="mb-1">INITIALIZING SYNC...</p>
+<p class="mb-1 text-outline">&gt; CACHE PURGE COMPLETE</p>
+<p class="mb-1">&gt; LINEAGE DATA STREAM: ACTIVE</p>
+<p class="animate-pulse">&gt; _</p>
+</div>
+</div>
+</aside>
+</main>
+<!-- Bottom Nav (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-highest flex justify-around py-4 z-50">
+<span class="material-symbols-outlined text-primary-container">fingerprint</span>
+<span class="material-symbols-outlined text-outline">account_tree</span>
+<span class="material-symbols-outlined text-outline">history</span>
+<span class="material-symbols-outlined text-outline">alt_route</span>
+<span class="material-symbols-outlined text-outline">visibility</span>
+</nav>
+</body></html>

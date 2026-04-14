@@ -10,13 +10,17 @@ import {
   SAVE_TYPES,
   TARGET_SCOPES,
 } from "@bugchud/core/foundation";
-import type {
-  CharacterInitializationInput,
-  CharacterState,
-  NpcInitializationInput,
-  NpcState,
+import {
+  CharacterModel,
+  type CharacterInitializationInput,
+  type CharacterState,
+  type NpcInitializationInput,
+  type NpcState,
 } from "@bugchud/core";
-import type { ValidationResult } from "@bugchud/core/validation";
+import type {
+  ValidationIssue,
+  ValidationResult,
+} from "@bugchud/core/validation";
 import { v } from "convex/values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
@@ -83,9 +87,19 @@ export const bugchudCore = new BugchudCore({ ruleset: importedRuleset });
 export const BUGCHUD_RULESET_ID = importedRuleset.id;
 export const BUGCHUD_RULESET_VERSION = importedRuleset.version;
 export const BUGCHUD_SCHEMA_VERSION = 1;
+export const characterWizardSteps = [
+  "identity",
+  "lineage",
+  "background",
+  "path",
+  "faith",
+  "gear",
+  "review",
+] as const;
 
 export const definitionKindValidator = literalUnion(definitionKinds);
 export const entityKindValidator = literalUnion(entityKinds);
+export const characterWizardStepValidator = literalUnion(characterWizardSteps);
 export const actorKindValidator = v.union(
   v.literal("creature"),
   v.literal("npc"),
@@ -515,6 +529,32 @@ export const assertNpcStateIsValid = (state: NpcState) => {
     throw new Error(validationIssueMessage(result));
   }
 };
+
+export const normalizeCharacterState = (state: CharacterState) =>
+  CharacterModel.fromState(bugchudCore, structuredClone(state))
+    .refreshDerivedState()
+    .toState();
+
+export const previewCharacterState = (state: CharacterState) => {
+  const model = CharacterModel.fromState(bugchudCore, structuredClone(state));
+  model.refreshDerivedState();
+
+  return {
+    normalizedState: model.toState(),
+    validation: model.validate(),
+    combatProfile: model.getCombatProfileDraft(),
+  };
+};
+
+export const serializeValidationResult = (
+  result: ValidationResult,
+): {
+  ok: boolean;
+  issues: ValidationIssue[];
+} => ({
+  ok: result.ok,
+  issues: [...result.issues],
+});
 
 export const buildCharacterMetadata = (state: CharacterState) => ({
   bugchudId: state.id,

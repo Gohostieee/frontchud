@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
   BUGCHUD_SCHEMA_VERSION,
   actorKindValidator,
+  characterWizardStepValidator,
   characterStateValidator,
   npcStateValidator,
 } from "./bugchud";
@@ -16,6 +17,9 @@ export default defineSchema({
     rulesetVersion: v.string(),
     name: v.string(),
     nameLower: v.string(),
+    status: v.union(v.literal("draft"), v.literal("complete")),
+    currentStep: characterWizardStepValidator,
+    completedAt: v.optional(v.number()),
     isArchived: v.boolean(),
     updatedAt: v.number(),
     state: characterStateValidator,
@@ -28,6 +32,10 @@ export default defineSchema({
     .index("by_ownerTokenIdentifier_and_isArchived", [
       "ownerTokenIdentifier",
       "isArchived",
+    ])
+    .index("by_ownerTokenIdentifier_and_status", [
+      "ownerTokenIdentifier",
+      "status",
     ])
     .searchIndex("search_name", {
       searchField: "nameLower",

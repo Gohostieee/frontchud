@@ -4,6 +4,7 @@ import { importedRuleset } from "@bugchud/core/data";
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
+import { normalizeCharacterState, toBugchudCharacterState } from "./bugchud";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -41,6 +42,54 @@ test("ruleset queries expose imported BUGCHUD creation data", async () => {
   );
   expect(npcOptions.creatures.length).toBeGreaterThan(0);
   expect(npcOptions.npcLoadouts.length).toBeGreaterThan(0);
+});
+
+test("character editor options expose grouped step registries and empty-state arrays", async () => {
+  const t = convexTest(schema, modules);
+
+  const editorOptions = await t.query(api.ruleset.getCharacterEditorOptions, {});
+
+  expect(editorOptions.rulesetId).toBe(importedRuleset.id);
+  expect(editorOptions.steps.lineage.races.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.lineage.origins.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.background.backgrounds.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.path.dreams.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.path.spells.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.faith.pantheons.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.faith.patrons.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.gear.items.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.gear.weapons.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.gear.armors.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.social.factions.length).toBeGreaterThan(0);
+  expect(editorOptions.steps.social.cultures.length).toBeGreaterThan(0);
+
+  expect(editorOptions.steps.faith.boons).toEqual([]);
+  expect(editorOptions.steps.faith.covenants).toEqual([]);
+  expect(editorOptions.steps.gear.shields).toEqual([]);
+  expect(editorOptions.steps.background.backgroundsByOrigin).toHaveLength(
+    editorOptions.steps.lineage.origins.length,
+  );
+
+  const allFaithOptions = editorOptions.characterCreation.faithOptions.all;
+  expect(allFaithOptions.length).toBeGreaterThan(0);
+  expect(
+    editorOptions.characterCreation.faithOptions.pantheons.length +
+      editorOptions.characterCreation.faithOptions.patrons.length,
+  ).toBe(allFaithOptions.length);
+  expect(
+    allFaithOptions.every(
+      (option) => option.kind === "pantheon" || option.kind === "patron",
+    ),
+  ).toBe(true);
+
+  const firstOrigin = editorOptions.steps.lineage.origins[0];
+  const firstOriginMapping = editorOptions.steps.background.backgroundsByOrigin.find(
+    (entry) => entry.originId === firstOrigin?.id,
+  );
+  expect(firstOriginMapping).toBeDefined();
+  expect(Array.isArray(firstOriginMapping?.backgroundIds)).toBe(true);
+  expect(Array.isArray(firstOriginMapping?.startingDreamIds)).toBe(true);
+  expect(Array.isArray(firstOriginMapping?.startingLanguages)).toBe(true);
 });
 
 test("character create, read, update, archive, and owner scoping all work", async () => {
@@ -103,6 +152,95 @@ test("character create, read, update, archive, and owner scoping all work", asyn
   expect(
     await owner.query(api.characters.listMine, { includeArchived: true }),
   ).toHaveLength(1);
+});
+
+test("character drafts normalize persisted state and track workflow metadata", async () => {
+  const t = convexTest(schema, modules);
+  const owner = t.withIdentity(createIdentity("user|owner"));
+  const outsider = t.withIdentity(createIdentity("user|outsider"));
+
+  const created = await owner.mutation(api.characters.createDraft, {
+    input: {
+      name: "Ash Vale",
+      currentFate: 2,
+    },
+  });
+
+  expect(created).not.toBeNull();
+  expect(created?.status).toBe("draft");
+  expect(created?.currentStep).toBe("identity");
+  expect(created?.completedAt).toBeUndefined();
+
+  expect(await owner.query(api.characters.listMine, { status: "draft" })).toHaveLength(1);
+  expect(await owner.query(api.characters.listMine, { status: "complete" })).toHaveLength(0);
+
+  const staleState = structuredClone(created!.state);
+  const firstSaveKey = Object.keys(staleState.saveBonuses)[0] as
+    | keyof typeof staleState.saveBonuses
+    | undefined;
+  staleState.identity.name = "Ashen Vale";
+  staleState.derivedStats.sprint = 999;
+  staleState.derivedStats.focus = 999;
+  if (firstSaveKey) {
+    staleState.saveBonuses[firstSaveKey] = 999;
+  }
+  staleState.progression.spellAccessUnlocked = !staleState.progression.spellAccessUnlocked;
+  staleState.resources.health = {
+    current: 99,
+    maximum: 99,
+  };
+
+  const preview = await owner.query(api.characters.previewDraft, {
+    state: staleState,
+  });
+  const expectedNormalized = normalizeCharacterState(toBugchudCharacterState(staleState));
+
+  expect(preview.normalizedState.derivedStats).toEqual(expectedNormalized.derivedStats);
+  expect(preview.normalizedState.saveBonuses).toEqual(expectedNormalized.saveBonuses);
+  expect(preview.normalizedState.progression.spellAccessUnlocked).toBe(
+    expectedNormalized.progression.spellAccessUnlocked,
+  );
+  expect(preview.normalizedState.resources).toEqual(expectedNormalized.resources);
+
+  const saved = await owner.mutation(api.characters.saveDraft, {
+    bugchudId: created!.bugchudId,
+    state: staleState,
+    currentStep: "path",
+  });
+
+  expect(saved?.status).toBe("draft");
+  expect(saved?.currentStep).toBe("path");
+  expect(saved?.name).toBe("Ashen Vale");
+  expect(saved?.state.derivedStats).toEqual(expectedNormalized.derivedStats);
+  expect(saved?.state.saveBonuses).toEqual(expectedNormalized.saveBonuses);
+  expect(saved?.state.progression.spellAccessUnlocked).toBe(
+    expectedNormalized.progression.spellAccessUnlocked,
+  );
+  expect(saved?.state.resources).toEqual(expectedNormalized.resources);
+
+  const resumed = await owner.query(api.characters.getMine, {
+    bugchudId: created!.bugchudId,
+  });
+  expect(resumed?.status).toBe("draft");
+  expect(resumed?.currentStep).toBe("path");
+  expect(resumed?.state.derivedStats).toEqual(expectedNormalized.derivedStats);
+
+  expect(
+    await outsider.query(api.characters.getMine, {
+      bugchudId: created!.bugchudId,
+    }),
+  ).toBeNull();
+
+  const completed = await owner.mutation(api.characters.completeDraft, {
+    bugchudId: created!.bugchudId,
+    state: staleState,
+  });
+
+  expect(completed?.status).toBe("complete");
+  expect(completed?.currentStep).toBe("review");
+  expect(completed?.completedAt).toBeTypeOf("number");
+  expect(await owner.query(api.characters.listMine, { status: "draft" })).toHaveLength(0);
+  expect(await owner.query(api.characters.listMine, { status: "complete" })).toHaveLength(1);
 });
 
 test("character creation rejects invalid ruleset refs", async () => {

@@ -2,6 +2,16 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { bugchudCore, registryRefValidator } from "./bugchud";
 
+const catalogList = <TKind extends Parameters<typeof bugchudCore.catalog.listByKind>[0]>(
+  kind: TKind,
+) => [...bugchudCore.catalog.listByKind(kind)];
+
+const resolveFaithOption = (refValue: { kind: string; id: string }) => ({
+  kind: refValue.kind,
+  ref: refValue,
+  definition: bugchudCore.catalog.mustResolveRef(refValue as never),
+});
+
 export const getCharacterCreationOptions = query({
   args: {
     originRef: v.optional(registryRefValidator("origin")),
@@ -15,6 +25,101 @@ export const getCharacterCreationOptions = query({
       rulesetId: bugchudCore.ruleset.id,
       rulesetVersion: bugchudCore.ruleset.version,
       ...creationOptions,
+    };
+  },
+});
+
+export const getCharacterEditorOptions = query({
+  args: {},
+  handler: async () => {
+    const races = catalogList("race");
+    const origins = catalogList("origin");
+    const backgrounds = catalogList("background");
+    const dreams = catalogList("dream");
+    const factions = catalogList("faction");
+    const cultures = catalogList("culture");
+    const items = catalogList("item");
+    const weapons = catalogList("weapon");
+    const armors = catalogList("armor");
+    const shields = catalogList("shield");
+    const bionics = catalogList("bionic");
+    const mutations = catalogList("mutation");
+    const grimoires = catalogList("grimoire");
+    const spells = catalogList("spell");
+    const alchemyRecipes = catalogList("alchemyRecipe");
+    const pantheons = catalogList("pantheon");
+    const patrons = catalogList("patron");
+    const boons = catalogList("boon");
+    const covenants = catalogList("covenant");
+    const relics = catalogList("relic");
+
+    const faithOptionRefs = bugchudCore.ruleset.characterCreation.faithOptions
+      .filter(
+        (refValue) => refValue.kind === "pantheon" || refValue.kind === "patron",
+      )
+      .map((refValue) => ({
+        kind: refValue.kind,
+        id: refValue.id,
+      }));
+    const resolvedFaithOptions = faithOptionRefs.map(resolveFaithOption);
+
+    return {
+      rulesetId: bugchudCore.ruleset.id,
+      rulesetVersion: bugchudCore.ruleset.version,
+      characterCreation: {
+        ...bugchudCore.ruleset.characterCreation,
+        faithOptions: {
+          all: resolvedFaithOptions,
+          pantheons: resolvedFaithOptions.filter((option) => option.kind === "pantheon"),
+          patrons: resolvedFaithOptions.filter((option) => option.kind === "patron"),
+        },
+      },
+      characterLore: bugchudCore.ruleset.characterLore,
+      characterProgression: bugchudCore.ruleset.progression,
+      inventoryRules: bugchudCore.ruleset.inventoryAndAssets.inventoryRules,
+      steps: {
+        lineage: {
+          races,
+          origins,
+        },
+        background: {
+          backgrounds,
+          backgroundsByOrigin: origins.map((origin) => ({
+            originId: origin.id,
+            backgroundIds: origin.availableBackgroundRefs.map((refValue) => refValue.id),
+            startingDreamIds: origin.startingDreamRefs?.map((refValue) => refValue.id) ?? [],
+            startingLanguages: [...(origin.startingLanguages ?? [])],
+          })),
+        },
+        path: {
+          dreams,
+          mutations,
+          bionics,
+          grimoires,
+          spells,
+          alchemyRecipes,
+        },
+        faith: {
+          pantheons,
+          patrons,
+          boons,
+          covenants,
+          relics,
+        },
+        gear: {
+          items,
+          weapons,
+          armors,
+          shields,
+          containerDefinitions: bugchudCore.ruleset.inventoryAndAssets.inventoryRules.containerDefinitions,
+          denominations: [...bugchudCore.ruleset.inventoryAndAssets.economy.denominations],
+          defaultCurrency: bugchudCore.ruleset.inventoryAndAssets.economy.defaultCurrency,
+        },
+        social: {
+          factions,
+          cultures,
+        },
+      },
     };
   },
 });
