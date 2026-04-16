@@ -65,13 +65,12 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     label: "NPCs",
-    kind: "upcoming",
-    match: () => false,
-  },
-  {
-    label: "Grimoire",
-    kind: "upcoming",
-    match: () => false,
+    href: "/npcs",
+    kind: "live",
+    match: (pathname: string) =>
+      pathname === "/npcs" ||
+      pathname === "/npcs/new" ||
+      /^\/npcs\/[^/]+$/.test(pathname),
   },
   {
     label: "Log",

@@ -9,7 +9,6 @@ import {
   Scroll,
   Skull,
   Sparkle,
-  TerminalWindow,
   UserCirclePlus,
 } from "@phosphor-icons/react";
 import {
@@ -65,7 +64,7 @@ export default function Home() {
     : "Synchronizing canonical race and origin matrices.";
   const npcSummary = npcOptions
     ? `${npcOptions.creatures.length} creatures // ${npcOptions.npcLoadouts.length} loadouts`
-    : "Reading creature taxonomy from the imported grimoire.";
+    : "Reading creature taxonomy from the imported ruleset.";
 
   const moduleCards = [
     {
@@ -80,6 +79,7 @@ export default function Home() {
       sequence: "Sequence 002 // Summon entities",
       summary: npcSummary,
       icon: Skull,
+      href: "/npcs",
     },
     {
       title: "Ruleset Explorer",
@@ -137,7 +137,7 @@ export default function Home() {
                 <p className="max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
                   {isAuthenticated
                     ? "Clerk has verified this operator. Step through the protected manager conduit to inspect imported rulesets, shape characters, and monitor active ritual state."
-                    : "An ancient interface for modern grimoires. Manage characters, summon NPCs, and navigate the imported BUGCHUD canon through a ritualistic digital lens."}
+                    : "An ancient interface for BUGCHUD operations. Manage characters, summon NPCs, and navigate the imported canon through a ritualistic digital lens."}
                 </p>
 
                 <div className="flex flex-wrap gap-3 text-[0.72rem] uppercase tracking-[0.34em] text-muted-foreground">
@@ -287,10 +287,10 @@ function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg">
-          <a href="#system-feed">
-            <TerminalWindow data-icon="inline-end" />
-            <span className="uppercase tracking-[0.28em]">Review Feed</span>
-          </a>
+          <Link href="/npcs">
+            <Skull data-icon="inline-end" />
+            <span className="uppercase tracking-[0.28em]">Open NPCs</span>
+          </Link>
         </Button>
       </div>
     );

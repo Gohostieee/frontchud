@@ -319,10 +319,6 @@ function refKey(refValue: AnyRegistryRef | undefined | null) {
   return refValue ? `${String(refValue.kind)}:${refValue.id}` : "";
 }
 
-function isSameRef(a: AnyRegistryRef | undefined | null, b: AnyRegistryRef | undefined | null) {
-  return refKey(a) === refKey(b);
-}
-
 function parseCommaList(value: string) {
   return value
     .split(",")

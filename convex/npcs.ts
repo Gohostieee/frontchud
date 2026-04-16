@@ -25,7 +25,6 @@ import {
   magicStateValidator,
   normalizeNpcState,
   normalizeSearchText,
-  npcInitializationInputValidator,
   npcStateValidator,
   npcWizardStepValidator,
   ownedItemStackValidator,
@@ -154,7 +153,19 @@ const ensureRegistryRefsExist = (
 };
 
 const assertNpcWorkflowRefs = (input: NpcWorkflowInput) => {
-  assertNpcInitializationRefs(input);
+  assertNpcInitializationRefs(
+    toBugchudNpcInput({
+      id: input.id,
+      name: input.name,
+      creatureRef: input.creatureRef,
+      npcLoadoutRef: input.npcLoadoutRef,
+      allegiance: input.allegiance,
+      actorKind: input.actorKind,
+      startingItems: input.startingItems,
+      tags: input.tags,
+      extensions: input.extensions,
+    }),
+  );
   ensureRegistryRefsExist(input.mutationRefs);
   ensureRegistryRefsExist(input.bionicRefs);
   ensureRegistryRefsExist(input.grimoireRefs);
