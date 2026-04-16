@@ -23,7 +23,7 @@ export default function NewNpcPage() {
                   New Entity
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                  Stay on this route while you shape the creature template, authored loadout, doctrine, inventory, and review handoff.
+                  Stay on this route while you shape identity, stage optional prefills, refine capabilities and gear, and review the final handoff.
                 </p>
               </div>
             </div>

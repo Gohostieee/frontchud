@@ -83,14 +83,13 @@ import {
   type SearchOption,
 } from "../../characters/_components/character-editor-controls";
 
-const GUIDED_STEPS = [
-  "identity",
-  "template",
-  "loadout",
-  "capabilities",
-  "gear",
-  "review",
-] as const;
+const GUIDED_STEPS = ["setup", "capabilities", "gear", "review"] as const;
+const GUIDED_STEP_LABELS: Record<GuidedStep, string> = {
+  setup: "Setup",
+  capabilities: "Capabilities",
+  gear: "Gear",
+  review: "Review",
+};
 const RESOURCE_KEYS = [
   "focus",
   "xom",
@@ -105,7 +104,7 @@ const RESOURCE_KEYS = [
   "durability",
   "shieldIntegrity",
 ] as const;
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 
 type GuidedStep = (typeof GUIDED_STEPS)[number];
 type CurrencyMap = Record<string, number>;
@@ -158,7 +157,7 @@ type GuidedWizardState = {
 
 function defaultWizardState(): GuidedWizardState {
   return {
-    currentStep: "identity",
+    currentStep: "setup",
     name: "",
     tagsText: "",
     allegiance: "",
@@ -188,6 +187,14 @@ function buildStorageKey(options: GuidedOptions) {
 
 function stepIndex(step: GuidedStep) {
   return GUIDED_STEPS.indexOf(step);
+}
+
+function prefillKeyForState(state: Pick<GuidedWizardState, "actorKind" | "creatureId" | "npcLoadoutId">) {
+  return `${state.actorKind}:${state.creatureId ?? ""}:${state.npcLoadoutId ?? ""}`;
+}
+
+function stepLabel(step: GuidedStep) {
+  return GUIDED_STEP_LABELS[step];
 }
 
 function toSearchOption(
@@ -242,6 +249,45 @@ function cloneState<T>(value: T): T {
   return structuredClone(value);
 }
 
+function applyGeneratedSlices(
+  state: GuidedWizardState,
+  normalizedState: NpcState,
+  defaultCurrency: string,
+): GuidedWizardState {
+  return normalizeGuidedWizardCurrency(
+    {
+      ...state,
+      body: cloneState(normalizedState.body),
+      inventory: cloneState(normalizedState.inventory),
+      loadout: cloneState(normalizedState.loadout),
+      magic: cloneState(normalizedState.magic),
+      faith: cloneState(normalizedState.faith),
+      resources: cloneState(normalizedState.resources),
+      activeEffects: cloneState(normalizedState.activeEffects),
+    },
+    defaultCurrency,
+  );
+}
+
+function migrateStoredWizardState(
+  rawState: GuidedWizardState,
+  defaultCurrency: string,
+): GuidedWizardState {
+  const legacyStep = rawState.currentStep as string;
+  const currentStep: GuidedStep =
+    legacyStep === "gear" || legacyStep === "review" || legacyStep === "capabilities"
+      ? legacyStep
+      : "setup";
+
+  return normalizeGuidedWizardCurrency(
+    {
+      ...rawState,
+      currentStep,
+    },
+    defaultCurrency,
+  );
+}
+
 function normalizeGuidedWizardCurrency(state: GuidedWizardState, defaultCurrency: string) {
   if (!state.inventory) {
     return state;
@@ -294,7 +340,7 @@ export function GuidedNpcCreator() {
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const hydratedStorageKeyRef = useRef<string | null>(null);
-  const hydratedTemplateKeyRef = useRef<string | null>(null);
+  const appliedPrefillKeyRef = useRef<string | null>(null);
   const deferredWizard = useDeferredValue(wizard);
   const storageKey = options ? buildStorageKey(options) : null;
 
@@ -325,13 +371,24 @@ export function GuidedNpcCreator() {
         version: number;
         state: GuidedWizardState;
       };
-      if (parsed.version !== STORAGE_VERSION) {
+      if (parsed.version > STORAGE_VERSION || parsed.version < 1) {
         window.localStorage.removeItem(storageKey);
         return;
       }
-      setWizard(
-        normalizeGuidedWizardCurrency(parsed.state, options?.defaultCurrency ?? "zennies"),
+      const migratedState = migrateStoredWizardState(
+        parsed.state,
+        options?.defaultCurrency ?? "zennies",
       );
+      appliedPrefillKeyRef.current =
+        migratedState.body &&
+        migratedState.inventory &&
+        migratedState.loadout &&
+        migratedState.magic &&
+        migratedState.faith &&
+        migratedState.resources
+          ? prefillKeyForState(migratedState)
+          : null;
+      setWizard(migratedState);
     } catch {
       window.localStorage.removeItem(storageKey);
     }
@@ -351,12 +408,30 @@ export function GuidedNpcCreator() {
     );
   }, [storageKey, wizard]);
 
+  const prefillPreviewInput = useMemo(() => {
+    if (!options || !deferredWizard.creatureId) {
+      return "skip";
+    }
+
+    return {
+      input: {
+        name: deferredWizard.name.trim() || undefined,
+        actorKind: deferredWizard.actorKind,
+        allegiance: deferredWizard.allegiance.trim() || undefined,
+        creatureRef: registryRef("creature", deferredWizard.creatureId),
+        npcLoadoutRef: deferredWizard.npcLoadoutId
+          ? registryRef("npcLoadout", deferredWizard.npcLoadoutId)
+          : undefined,
+        tags: parseCommaList(deferredWizard.tagsText),
+      },
+    };
+  }, [deferredWizard, options]);
+
   const previewInput = useMemo(() => {
     if (!options || !deferredWizard.creatureId) {
       return "skip";
     }
 
-    const creatureId = deferredWizard.creatureId;
     const normalizedWizard = normalizeGuidedWizardCurrency(
       deferredWizard,
       options.defaultCurrency,
@@ -367,7 +442,7 @@ export function GuidedNpcCreator() {
         name: normalizedWizard.name.trim() || undefined,
         actorKind: normalizedWizard.actorKind,
         allegiance: normalizedWizard.allegiance.trim() || undefined,
-        creatureRef: registryRef("creature", creatureId),
+        creatureRef: registryRef("creature", deferredWizard.creatureId),
         npcLoadoutRef: normalizedWizard.npcLoadoutId
           ? registryRef("npcLoadout", normalizedWizard.npcLoadoutId)
           : undefined,
@@ -385,13 +460,22 @@ export function GuidedNpcCreator() {
     };
   }, [deferredWizard, options]);
 
+  const prefillPreview = useQuery(
+    api.npcs.previewInitialization,
+    prefillPreviewInput as never,
+  ) as Preview | undefined;
   const preview = useQuery(
     api.npcs.previewInitialization,
     previewInput as never,
   ) as Preview | undefined;
 
   const templateKey = useMemo(
-    () => `${wizard.actorKind}:${wizard.creatureId ?? ""}:${wizard.npcLoadoutId ?? ""}`,
+    () =>
+      prefillKeyForState({
+        actorKind: wizard.actorKind,
+        creatureId: wizard.creatureId,
+        npcLoadoutId: wizard.npcLoadoutId,
+      }),
     [wizard.actorKind, wizard.creatureId, wizard.npcLoadoutId],
   );
   const visibleDenominations = useMemo(
@@ -401,29 +485,6 @@ export function GuidedNpcCreator() {
         : [],
     [options],
   );
-
-  useEffect(() => {
-    if (!preview || hydratedTemplateKeyRef.current === templateKey) {
-      return;
-    }
-
-    hydratedTemplateKeyRef.current = templateKey;
-    setWizard((current) =>
-      normalizeGuidedWizardCurrency(
-        {
-          ...current,
-          body: cloneState(preview.normalizedState.body),
-          inventory: cloneState(preview.normalizedState.inventory),
-          loadout: cloneState(preview.normalizedState.loadout),
-          magic: cloneState(preview.normalizedState.magic),
-          faith: cloneState(preview.normalizedState.faith),
-          resources: cloneState(preview.normalizedState.resources),
-          activeEffects: cloneState(preview.normalizedState.activeEffects),
-        },
-        options?.defaultCurrency ?? "zennies",
-      ),
-    );
-  }, [options?.defaultCurrency, preview, templateKey]);
 
   const inventoryCatalog = useMemo<InventoryPlacementCatalog | null>(() => {
     if (!options) {
@@ -447,18 +508,15 @@ export function GuidedNpcCreator() {
     });
   }
 
-  function resetTemplateSlices() {
-    updateWizard((current) => ({
-      ...current,
-      body: null,
-      inventory: null,
-      loadout: null,
-      magic: null,
-      faith: null,
-      resources: null,
-      activeEffects: null,
-    }));
-    hydratedTemplateKeyRef.current = null;
+  function applyPrefill() {
+    if (!prefillPreview || !options) {
+      return;
+    }
+
+    updateWizard((current) =>
+      applyGeneratedSlices(current, prefillPreview.normalizedState, options.defaultCurrency),
+    );
+    appliedPrefillKeyRef.current = templateKey;
   }
 
   function mutateDraftState(
@@ -640,7 +698,7 @@ export function GuidedNpcCreator() {
   );
   const [inventorySelection, setInventorySelection] = useState<string | undefined>(undefined);
 
-  const maxUnlockedStep = wizard.creatureId ? GUIDED_STEPS.length - 1 : 1;
+  const maxUnlockedStep = wizard.creatureId ? GUIDED_STEPS.length - 1 : 0;
   const validationIssues = preview?.validation.issues ?? [];
 
   async function handleCreateDraft() {
@@ -732,7 +790,7 @@ export function GuidedNpcCreator() {
             disabled={stepIndex(step) > maxUnlockedStep}
             onClick={() => updateCurrentStep(step)}
           >
-            {step}
+            {stepLabel(step)}
           </Button>
         ))}
       </div>
@@ -747,89 +805,104 @@ export function GuidedNpcCreator() {
           </div>
           <div className="space-y-2">
             <CardTitle className="font-display text-4xl font-black tracking-[-0.06em] text-primary sm:text-5xl">
-              {wizard.currentStep[0]?.toUpperCase() + wizard.currentStep.slice(1)}
+              {stepLabel(wizard.currentStep)}
             </CardTitle>
             <CardDescription className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              Forge a creature-side draft with template defaults, capability overrides, gear, and a live preview before persistence.
+              Shape identity, stage optional prefills, refine capabilities, and verify the final draft before persistence.
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-8 py-6">
-          {wizard.currentStep === "identity" ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <CompactTextField
-                id="npc-name"
-                label="Display name"
-                value={wizard.name}
-                onChange={(value) => updateWizard((current) => ({ ...current, name: value }))}
-                placeholder="Roadfang"
-              />
-              <CompactTextField
-                id="npc-allegiance"
-                label="Allegiance"
-                value={wizard.allegiance}
-                onChange={(value) => updateWizard((current) => ({ ...current, allegiance: value }))}
-                placeholder="Raiders"
-              />
-              <CompactTextField
-                id="npc-tags"
-                label="Tags"
-                value={wizard.tagsText}
-                onChange={(value) => updateWizard((current) => ({ ...current, tagsText: value }))}
-                placeholder="boss, elite"
-                description="Comma-separated labels."
-              />
-              <div className="space-y-3">
-                <div className="text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
-                  Actor kind
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(["npc", "creature", "mount"] as const).map((kind) => (
-                    <Button
-                      key={kind}
-                      variant={wizard.actorKind === kind ? "default" : "outline"}
-                      size="xs"
-                      onClick={() => {
-                        updateWizard((current) => ({ ...current, actorKind: kind }));
-                        resetTemplateSlices();
-                      }}
-                    >
-                      {kind}
-                    </Button>
-                  ))}
+          {wizard.currentStep === "setup" ? (
+            <div className="flex flex-col gap-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <CompactTextField
+                  id="npc-name"
+                  label="Display name"
+                  value={wizard.name}
+                  onChange={(value) => updateWizard((current) => ({ ...current, name: value }))}
+                  placeholder="Roadfang"
+                />
+                <CompactTextField
+                  id="npc-allegiance"
+                  label="Allegiance"
+                  value={wizard.allegiance}
+                  onChange={(value) => updateWizard((current) => ({ ...current, allegiance: value }))}
+                  placeholder="Raiders"
+                />
+                <CompactTextField
+                  id="npc-tags"
+                  label="Tags"
+                  value={wizard.tagsText}
+                  onChange={(value) => updateWizard((current) => ({ ...current, tagsText: value }))}
+                  placeholder="boss, elite"
+                  description="Comma-separated labels."
+                />
+                <div className="space-y-3">
+                  <div className="text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
+                    Actor kind
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["npc", "creature", "mount"] as const).map((kind) => (
+                      <Button
+                        key={kind}
+                        variant={wizard.actorKind === kind ? "default" : "outline"}
+                        size="xs"
+                        onClick={() => {
+                          updateWizard((current) => ({ ...current, actorKind: kind }));
+                        }}
+                      >
+                        {kind}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
 
-          {wizard.currentStep === "template" || wizard.currentStep === "loadout" ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <SearchableSingleSelect
-                label="Creature template"
-                options={creatureOptions}
-                value={wizard.creatureId ?? undefined}
-                onChange={(value) => {
-                  updateWizard((current) => ({ ...current, creatureId: value ?? null }));
-                  resetTemplateSlices();
-                }}
-              />
-              <SearchableSingleSelect
-                label="NPC loadout"
-                options={loadoutOptions}
-                value={wizard.npcLoadoutId ?? undefined}
-                onChange={(value) => {
-                  updateWizard((current) => ({ ...current, npcLoadoutId: value ?? null }));
-                  resetTemplateSlices();
-                }}
-                description="Optional authored loadout to layer onto the creature template."
-              />
-              <div className="border border-border/20 bg-background/55 px-4 py-4 md:col-span-2">
+              <div className="border border-border/20 bg-background/55 px-4 py-4">
                 <div className="text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground">
-                  Template handoff
+                  Authored prefills
                 </div>
                 <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                  Changing the creature or loadout rebuilds body, doctrine, faith, and gear slices from the server preview so the draft stays aligned with authored defaults.
+                  Creature templates are required. NPC loadouts are optional. Picking either one stages a prefill preview, and applying it rewrites generated capability, faith, and gear slices without touching identity fields.
                 </p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <SearchableSingleSelect
+                    label="Creature template"
+                    options={creatureOptions}
+                    value={wizard.creatureId ?? undefined}
+                    onChange={(value) => {
+                      updateWizard((current) => ({ ...current, creatureId: value ?? null }));
+                    }}
+                  />
+                  <SearchableSingleSelect
+                    label="NPC loadout"
+                    options={loadoutOptions}
+                    value={wizard.npcLoadoutId ?? undefined}
+                    onChange={(value) => {
+                      updateWizard((current) => ({ ...current, npcLoadoutId: value ?? null }));
+                    }}
+                    description="Optional authored loadout to layer onto the creature template."
+                  />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Button
+                    variant={appliedPrefillKeyRef.current === templateKey ? "outline" : "default"}
+                    onClick={() => applyPrefill()}
+                    disabled={!prefillPreview || !wizard.creatureId}
+                  >
+                    {appliedPrefillKeyRef.current === templateKey ? "Reapply prefill" : "Apply prefill"}
+                  </Button>
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    {!wizard.creatureId
+                      ? "Choose a creature template to stage a prefill."
+                      : !prefillPreview
+                        ? "Staging prefill preview."
+                        : appliedPrefillKeyRef.current === templateKey
+                          ? "Current prefill has been applied to generated slices."
+                          : "Selection is staged and ready to apply."}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1217,7 +1290,7 @@ export function GuidedNpcCreator() {
       <div className="flex flex-wrap gap-3">
         <Button
           variant="outline"
-          disabled={wizard.currentStep === "identity"}
+          disabled={wizard.currentStep === "setup"}
           onClick={() => updateCurrentStep(GUIDED_STEPS[Math.max(0, stepIndex(wizard.currentStep) - 1)]!)}
         >
           Back
@@ -1226,7 +1299,7 @@ export function GuidedNpcCreator() {
           variant="ghost"
           onClick={() => {
             setWizard(defaultWizardState());
-            hydratedTemplateKeyRef.current = null;
+            appliedPrefillKeyRef.current = null;
             if (storageKey) {
               window.localStorage.removeItem(storageKey);
             }

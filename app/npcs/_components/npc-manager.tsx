@@ -114,6 +114,22 @@ function formatTimestamp(timestamp: number | null) {
   }).format(timestamp);
 }
 
+function formatWorkflowStep(step: string) {
+  if (step === "identity" || step === "template") {
+    return "Setup";
+  }
+  if (step === "body" || step === "doctrine") {
+    return "Capabilities";
+  }
+  if (step === "gear") {
+    return "Gear";
+  }
+  if (step === "review") {
+    return "Review";
+  }
+  return step;
+}
+
 function normalizeCategoryId(npc: ManagerNpc, categories: ManagerCategory[]) {
   if (!npc.managerCategoryId) {
     return null;
@@ -273,7 +289,7 @@ function NpcListRow({
                 <Badge variant={npc.status === "complete" ? "default" : "outline"}>
                   {npc.status}
                 </Badge>
-                <Badge variant="ghost">{npc.currentStep}</Badge>
+                <Badge variant="ghost">{formatWorkflowStep(npc.currentStep)}</Badge>
                 <Badge variant="ghost">{npc.actorKind}</Badge>
                 <Badge variant="ghost">{npc.creatureName}</Badge>
                 {npc.npcLoadoutName ? <Badge variant="ghost">{npc.npcLoadoutName}</Badge> : null}
