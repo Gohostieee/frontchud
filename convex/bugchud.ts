@@ -12,6 +12,7 @@ import {
 } from "@bugchud/core/foundation";
 import {
   CharacterModel,
+  NpcModel,
   type CharacterInitializationInput,
   type CharacterState,
   type NpcInitializationInput,
@@ -22,6 +23,11 @@ import type {
   ValidationResult,
 } from "@bugchud/core/validation";
 import { v } from "convex/values";
+import {
+  type BackgroundOriginMapping,
+  getBackgroundSelectionValidationMessage,
+} from "../lib/character-background-rules";
+import type { GuidedBackgroundSpecialSelections } from "../lib/character-background-special-steps";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 const literalUnion = <T extends readonly string[]>(values: T) =>
@@ -84,9 +90,31 @@ const jsonBlobValidator = v.record(v.string(), v.any());
 
 export const bugchudCore = new BugchudCore({ ruleset: importedRuleset });
 
+export const getBackgroundsByOrigin = (): BackgroundOriginMapping[] =>
+  [...bugchudCore.catalog.listByKind("origin")].map((origin) => ({
+    originId: origin.id,
+    backgroundIds: origin.availableBackgroundRefs.map((refValue) => refValue.id),
+    startingDreamIds: origin.startingDreamRefs?.map((refValue) => refValue.id) ?? [],
+    startingLanguages: [...(origin.startingLanguages ?? [])],
+  }));
+
+export const assertCharacterBackgroundSelectionAllowed = (
+  input: Pick<CharacterInitializationInput, "originRef" | "backgroundRefs">,
+) => {
+  const validationMessage = getBackgroundSelectionValidationMessage({
+    originId: input.originRef?.id ?? null,
+    selectedBackgroundIds: input.backgroundRefs?.map((refValue) => refValue.id) ?? [],
+    backgroundsByOrigin: getBackgroundsByOrigin(),
+  });
+
+  if (validationMessage) {
+    throw new Error(validationMessage);
+  }
+};
+
 export const BUGCHUD_RULESET_ID = importedRuleset.id;
 export const BUGCHUD_RULESET_VERSION = importedRuleset.version;
-export const BUGCHUD_SCHEMA_VERSION = 1;
+export const BUGCHUD_SCHEMA_VERSION = 2;
 export const characterWizardSteps = [
   "identity",
   "lineage",
@@ -96,10 +124,19 @@ export const characterWizardSteps = [
   "gear",
   "review",
 ] as const;
+export const npcWizardSteps = [
+  "identity",
+  "template",
+  "body",
+  "doctrine",
+  "gear",
+  "review",
+] as const;
 
 export const definitionKindValidator = literalUnion(definitionKinds);
 export const entityKindValidator = literalUnion(entityKinds);
 export const characterWizardStepValidator = literalUnion(characterWizardSteps);
+export const npcWizardStepValidator = literalUnion(npcWizardSteps);
 export const actorKindValidator = v.union(
   v.literal("creature"),
   v.literal("npc"),
@@ -178,6 +215,14 @@ export const ownedItemStackValidator = v.object({
   quantity: v.number(),
   charges: v.optional(v.number()),
   containerId: v.optional(v.string()),
+  equippedSlot: v.optional(
+    v.union(
+      v.literal("mainHand"),
+      v.literal("offHand"),
+      v.literal("twoHanded"),
+      v.literal("armor"),
+    ),
+  ),
   tags: v.optional(v.array(v.string())),
 });
 
@@ -440,6 +485,14 @@ export const characterInitializationInputValidator = v.object({
   extensions: v.optional(jsonBlobValidator),
 });
 
+export const guidedBackgroundSpecialSelectionsValidator = v.object({
+  geneFreekMutationIds: v.array(v.string()),
+  overclockedBionicId: v.union(v.string(), v.null()),
+  sterileTyrantCutthroatCount: v.union(v.number(), v.null()),
+  arcyneKnownSpellIds: v.array(v.string()),
+  arcynePreparedSpellSlotsById: v.record(v.string(), v.number()),
+});
+
 export const npcInitializationInputValidator = v.object({
   id: v.optional(v.string()),
   name: v.optional(v.string()),
@@ -478,6 +531,38 @@ export const assertCharacterInitializationRefs = (
   ensureRegistryRefsExist(input.covenantRefs);
   ensureRegistryRefsExist(input.relicRefs);
   ensureRegistryRefsExist(input.startingItems?.map((item) => item.ref));
+};
+
+export const assertGuidedBackgroundSpecialSelectionRefs = (
+  selections: GuidedBackgroundSpecialSelections,
+) => {
+  ensureRegistryRefsExist(
+    selections.geneFreekMutationIds.map((id) => ({
+      kind: "mutation",
+      id,
+    })),
+  );
+
+  if (selections.overclockedBionicId) {
+    bugchudCore.catalog.mustResolveRef({
+      kind: "bionic",
+      id: selections.overclockedBionicId,
+    } as never);
+  }
+
+  ensureRegistryRefsExist(
+    selections.arcyneKnownSpellIds.map((id) => ({
+      kind: "spell",
+      id,
+    })),
+  );
+
+  ensureRegistryRefsExist(
+    Object.keys(selections.arcynePreparedSpellSlotsById).map((id) => ({
+      kind: "spell",
+      id,
+    })),
+  );
 };
 
 export const assertNpcInitializationRefs = (input: NpcInitializationInput) => {
@@ -535,9 +620,22 @@ export const normalizeCharacterState = (state: CharacterState) =>
     .refreshDerivedState()
     .toState();
 
+export const normalizeNpcState = (state: NpcState) =>
+  NpcModel.fromState(bugchudCore, structuredClone(state)).toState();
+
 export const previewCharacterState = (state: CharacterState) => {
   const model = CharacterModel.fromState(bugchudCore, structuredClone(state));
   model.refreshDerivedState();
+
+  return {
+    normalizedState: model.toState(),
+    validation: model.validate(),
+    combatProfile: model.getCombatProfileDraft(),
+  };
+};
+
+export const previewNpcState = (state: NpcState) => {
+  const model = NpcModel.fromState(bugchudCore, structuredClone(state));
 
   return {
     normalizedState: model.toState(),

@@ -10,11 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ArrowClockwiseIcon,
-  ArrowLeftIcon,
   BookOpenIcon,
   BroadcastIcon,
   CheckCircleIcon,
@@ -79,6 +75,42 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
+import {
+  buildBackgroundSelectionState,
+  getOriginBackgroundIds,
+  normalizeBackgroundSelection,
+  type BackgroundOriginMapping,
+  MAX_BACKGROUND_SELECTIONS,
+} from "@/lib/character-background-rules";
+import { getDreadTonguedAutoGrants } from "@/lib/character-background-special-steps";
+import {
+  ARCYNE_PREPARED_SLOT_TOTAL,
+  CHARACTER_CREATOR_EXTENSION_NAMESPACE,
+  applyResolvedArcyneSpellSelectionToState,
+  getArcyneSpellSelectionIssues,
+  getPreparedSlotsBySpellIdFromState,
+  hasArcynePotential,
+  resolveArcyneSpellSelection,
+} from "@/lib/character-spell-preparation";
+import {
+  appendInventoryStack,
+  buildInventoryPlacementCatalog,
+  buildInventoryStackKey,
+  getInventoryPlacementLabel,
+  isLegacyEquippableRef,
+  moveInventoryStackToContainerAtIndex,
+  removeInventoryStackAtIndex,
+  removeInventoryStackFromContainerAtIndex,
+  setLegacyNonCombatEquippedRefs,
+  stowEquippedInventoryStackAtIndex,
+  syncInventoryPlacementState,
+  type CharacterInventoryPlacementState,
+  type InventoryOwnedRef,
+  type InventoryPlacementCatalog,
+  updateInventoryStackCharges,
+  updateInventoryStackQuantity,
+  equipInventoryStackAtIndex,
+} from "@/lib/character-inventory-placement";
 import { cn } from "@/lib/utils";
 import {
   CompactTextField,
@@ -87,6 +119,7 @@ import {
   SearchableSingleSelect,
   type SearchOption,
 } from "./character-editor-controls";
+import { ArcyneSpellSelector } from "./character-spell-selector";
 
 const WIZARD_STEPS = [
   "identity",
@@ -171,12 +204,7 @@ type CharacterEditorOptions = {
     };
     background: {
       backgrounds: BackgroundDefinition[];
-      backgroundsByOrigin: Array<{
-        originId: string;
-        backgroundIds: string[];
-        startingDreamIds: string[];
-        startingLanguages: string[];
-      }>;
+      backgroundsByOrigin: BackgroundOriginMapping[];
     };
     path: {
       dreams: DreamDefinition[];
@@ -230,8 +258,6 @@ const RESOURCE_KEYS = [
   "shieldIntegrity",
 ] as const;
 const ROLL_ATTRIBUTE_KEYS = ["twitch", "flesh", "mojo"] as const;
-const ATTRIBUTE_ROLL_EXTENSION_NAMESPACE = "frontchudCharacterCreator";
-
 const STEP_META: Record<
   WizardStep,
   {
@@ -244,7 +270,7 @@ const STEP_META: Record<
   identity: {
     label: "Identity",
     sequence: "Seed the subject file",
-    description: "Establish nameplates, tags, and the core identity frame.",
+    description: "Establish nameplates and the core identity frame.",
     icon: UserCirclePlusIcon,
   },
   lineage: {
@@ -256,7 +282,7 @@ const STEP_META: Record<
   background: {
     label: "Background",
     sequence: "Assemble formative records",
-    description: "Layer in social ties, cultures, and background packages.",
+    description: "Layer in up to three background packages while keeping off-origin picks capped at one.",
     icon: BookOpenIcon,
   },
   path: {
@@ -279,7 +305,7 @@ const STEP_META: Record<
   },
   review: {
     label: "Review",
-    sequence: "Validate and seal the draft",
+    sequence: "Validate and finalize the draft",
     description: "Confirm the normalized runtime, validation state, and combat profile.",
     icon: ShieldChevronIcon,
   },
@@ -434,7 +460,7 @@ function computeRolledAttributesForRace(
   currentGlory: number,
 ) {
   const profile = getRaceRollProfile(race);
-  if (!profile.supported) {
+  if (!profile.supported || !profile.rules) {
     return null;
   }
 
@@ -453,7 +479,7 @@ function getStoredAttributeRolls(state: CharacterDraft): StoredAttributeRolls | 
     return null;
   }
 
-  const namespace = state.extensions[ATTRIBUTE_ROLL_EXTENSION_NAMESPACE];
+  const namespace = state.extensions[CHARACTER_CREATOR_EXTENSION_NAMESPACE];
   if (!isRecord(namespace)) {
     return null;
   }
@@ -493,12 +519,16 @@ function setStoredAttributeRolls(state: CharacterDraft, payload: StoredAttribute
   const nextExtensions = isRecord(state.extensions)
     ? { ...(state.extensions as Record<string, unknown>) }
     : {};
-  const namespace = isRecord(nextExtensions[ATTRIBUTE_ROLL_EXTENSION_NAMESPACE])
-    ? { ...(nextExtensions[ATTRIBUTE_ROLL_EXTENSION_NAMESPACE] as Record<string, unknown>) }
+  const namespace = isRecord(nextExtensions[CHARACTER_CREATOR_EXTENSION_NAMESPACE])
+    ? {
+        ...(nextExtensions[
+          CHARACTER_CREATOR_EXTENSION_NAMESPACE
+        ] as Record<string, unknown>),
+      }
     : {};
 
   namespace.attributeRolls = payload;
-  nextExtensions[ATTRIBUTE_ROLL_EXTENSION_NAMESPACE] = namespace;
+  nextExtensions[CHARACTER_CREATOR_EXTENSION_NAMESPACE] = namespace;
   state.extensions = nextExtensions as CharacterDraft["extensions"];
 }
 
@@ -510,22 +540,30 @@ function describeIssue(issue: ValidationIssue) {
   return `${issue.severity.toUpperCase()} :: ${issue.path} :: ${issue.message}`;
 }
 
+function arraysEqual(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function getBackgroundsForOrigin(
   options: CharacterEditorOptions,
   originRef: AnyRegistryRef,
 ) {
-  const originMapping = options.steps.background.backgroundsByOrigin.find(
-    (entry) => entry.originId === originRef.id,
+  const originBackgroundIds = getOriginBackgroundIds(
+    options.steps.background.backgroundsByOrigin,
+    originRef.id,
   );
-  if (!originMapping) {
+  if (originBackgroundIds.size === 0) {
     return [];
   }
 
-  return sortByName(
-    options.steps.background.backgrounds.filter((background) =>
-      originMapping.backgroundIds.includes(background.id),
-    ),
-  );
+  return [...options.steps.background.backgrounds].sort((left, right) => {
+    const leftRank = originBackgroundIds.has(left.id) ? 0 : 1;
+    const rightRank = originBackgroundIds.has(right.id) ? 0 : 1;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function getSuggestedDreams(options: CharacterEditorOptions, state: CharacterDraft) {
@@ -607,6 +645,8 @@ function inventoryLabelFromRef(options: CharacterEditorOptions, refValue: AnyReg
     findById(options.steps.gear.weapons, refValue.id)?.name ??
     findById(options.steps.gear.armors, refValue.id)?.name ??
     findById(options.steps.gear.shields, refValue.id)?.name ??
+    findById(options.steps.path.grimoires, refValue.id)?.name ??
+    findById(options.steps.faith.relics, refValue.id)?.name ??
     refValue.id
   );
 }
@@ -621,51 +661,6 @@ function getSaveTone(saveState: SaveState) {
       return "destructive";
     default:
       return "outline";
-  }
-}
-
-function syncInventorySelection(
-  state: CharacterDraft,
-  optionMap: Map<string, { ref: AnyRegistryRef; summary?: string }>,
-  nextKeys: string[],
-) {
-  const existingByKey = new Map(state.inventory.items.map((item) => [refKey(item.ref), item]));
-
-  state.inventory.items = nextKeys
-    .map((key) => {
-      const existing = existingByKey.get(key);
-      if (existing) {
-        return existing;
-      }
-
-      const option = optionMap.get(key);
-      if (!option) {
-        return null;
-      }
-
-      return {
-        ref: option.ref,
-        quantity: 1,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  const validKeys = new Set(nextKeys);
-  state.loadout.equippedItemRefs = state.loadout.equippedItemRefs.filter((entry) =>
-    validKeys.has(refKey(entry)),
-  );
-
-  if (!state.loadout.primaryWeaponRef || !validKeys.has(refKey(state.loadout.primaryWeaponRef))) {
-    state.loadout.primaryWeaponRef = undefined;
-  }
-  if (!state.loadout.secondaryWeaponRef || !validKeys.has(refKey(state.loadout.secondaryWeaponRef))) {
-    state.loadout.secondaryWeaponRef = undefined;
-  }
-  if (!state.loadout.armorRef || !validKeys.has(refKey(state.loadout.armorRef))) {
-    state.loadout.armorRef = undefined;
-  }
-  if (!state.loadout.shieldRef || !validKeys.has(refKey(state.loadout.shieldRef))) {
-    state.loadout.shieldRef = undefined;
   }
 }
 
@@ -703,24 +698,21 @@ function LoadingState({
   action?: ReactNode;
 }) {
   return (
-    <div className="relative min-h-screen overflow-x-clip">
-      <div className="grain-overlay pointer-events-none fixed inset-0 z-0" />
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
-        <Card className="module-cut ritual-surface-strong w-full max-w-2xl border border-border/20">
-          <CardHeader className="gap-3 border-b border-border/20 pb-5">
-            <Badge variant="outline" className="w-fit">
-              Character creator
-            </Badge>
-            <CardTitle className="font-display text-4xl font-black tracking-[-0.06em] text-primary sm:text-5xl">
-              {title}
-            </CardTitle>
-            <CardDescription className="max-w-xl text-sm leading-7 text-muted-foreground">
-              {detail}
-            </CardDescription>
-          </CardHeader>
-          {action ? <CardFooter className="justify-start">{action}</CardFooter> : null}
-        </Card>
-      </div>
+    <div className="flex min-h-[20rem] items-center justify-center px-4 py-8">
+      <Card className="w-full max-w-2xl border border-border/20 bg-background/70">
+        <CardHeader className="gap-3 border-b border-border/20 pb-5">
+          <Badge variant="outline" className="w-fit">
+            Character editor
+          </Badge>
+          <CardTitle className="font-display text-4xl font-black tracking-[-0.06em] text-primary sm:text-5xl">
+            {title}
+          </CardTitle>
+          <CardDescription className="max-w-xl text-sm leading-7 text-muted-foreground">
+            {detail}
+          </CardDescription>
+        </CardHeader>
+        {action ? <CardFooter className="justify-start">{action}</CardFooter> : null}
+      </Card>
     </div>
   );
 }
@@ -733,6 +725,7 @@ function NumberField({
   min,
   description,
   badge,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -741,6 +734,7 @@ function NumberField({
   min?: number;
   description?: string;
   badge?: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <Field>
@@ -754,6 +748,7 @@ function NumberField({
         min={min}
         value={Number.isFinite(value) ? value : 0}
         onChange={(event) => onChange(Number(event.target.value || 0))}
+        disabled={disabled}
       />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
@@ -922,7 +917,7 @@ function SectionTriggerSummary({
             {meta.label}
           </span>
           {step === "review" && status === "complete" ? (
-            <Badge variant="default">sealed</Badge>
+            <Badge variant="default">finalized</Badge>
           ) : null}
         </div>
         <span className="truncate font-mono text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
@@ -939,18 +934,15 @@ function SummaryPanel({
   preview,
   options,
   validationIssues,
-  saveState,
-  saveMessage,
 }: {
   className?: string;
   draft: CharacterDraft;
   preview: CharacterPreview | undefined;
   options: CharacterEditorOptions;
   validationIssues: ValidationIssue[];
-  saveState: SaveState;
-  saveMessage: string;
 }) {
   const state = preview?.normalizedState ?? draft;
+  const hasIssues = validationIssues.length > 0;
   const selectedRace = findByRef(options.steps.lineage.races, state.identity.raceRef);
   const selectedOrigin = findByRef(options.steps.lineage.origins, state.identity.originRef);
   const selectedBackgrounds = sortByName(
@@ -963,7 +955,7 @@ function SummaryPanel({
 
   return (
     <aside className={cn("min-w-0", className)}>
-      <Card className="module-cut ritual-surface-strong sticky top-6 border border-border/20">
+      <Card className="sticky top-4 border border-border/20 bg-background/65">
         <CardHeader className="gap-4 border-b border-border/20 pb-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-2">
@@ -971,22 +963,21 @@ function SummaryPanel({
                 Live dossier
               </Badge>
               <CardTitle className="font-display text-3xl font-black tracking-[-0.05em] text-secondary">
-                {state.identity.name || "Unsealed Subject"}
+                {state.identity.name || "Untitled Subject"}
               </CardTitle>
               <CardDescription className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
                 {state.identity.epithet || "Draft runtime snapshot"}
               </CardDescription>
             </div>
-            <SaveStatusBadge saveState={saveState} saveMessage={saveMessage} />
           </div>
         </CardHeader>
 
-        <CardContent className="flex max-h-[calc(100svh-10rem)] flex-col gap-5 overflow-y-auto py-4">
+        <CardContent className="flex max-h-[calc(100svh-8rem)] flex-col gap-5 overflow-y-auto py-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <MetricCard label="Validation" value={preview?.validation.ok ? "OK" : "Attention"} />
+            <MetricCard label="Validation" value={hasIssues ? "Attention" : "OK"} />
             <MetricCard label="Inventory" value={String(state.inventory.items.length)} />
             <MetricCard label="Dreams" value={String(state.progression.dreamRefs.length)} />
-            <MetricCard label="Status" value={preview?.validation.ok ? "Ready" : "Draft"} />
+            <MetricCard label="Status" value={hasIssues ? "Draft" : "Ready"} />
           </div>
 
           <Separator className="ghost-divider opacity-40" />
@@ -1056,7 +1047,7 @@ function SummaryPanel({
               </div>
             ) : (
               <p className="text-xs leading-6 text-muted-foreground">
-                No validation issues detected. The draft is ready to seal once the remaining choices feel right.
+                No validation issues detected. The draft is ready to finalize once the remaining choices feel right.
               </p>
             )}
           </div>
@@ -1066,20 +1057,20 @@ function SummaryPanel({
   );
 }
 
-export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
-  const router = useRouter();
+export function CharacterEditor({ bugchudId }: { bugchudId: string }) {
   const { isLoaded, isSignedIn } = useAuth();
-  const createDraft = useMutation(api.characters.createDraft);
   const saveDraft = useMutation(api.characters.saveDraft);
   const completeDraft = useMutation(api.characters.completeDraft);
 
-  const [resolvedBugchudId, setResolvedBugchudId] = useState<string | null>(bugchudId ?? null);
   const [draft, setDraft] = useState<CharacterDraft | null>(null);
   const [status, setStatus] = useState<CharacterStatus>("draft");
   const [currentStep, setCurrentStep] = useState<WizardStep>("identity");
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [jsonEditors, setJsonEditors] = useState<JsonEditorState | null>(null);
   const [jsonErrors, setJsonErrors] = useState<Record<string, string | null>>({});
+  const [inventoryCatalogSelection, setInventoryCatalogSelection] = useState<
+    string | undefined
+  >();
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("Draft not yet loaded");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -1088,7 +1079,6 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
     useState<AttributeRollPools | null>(null);
 
   const loadedVersionRef = useRef<string | null>(null);
-  const createStartedRef = useRef(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attributeRollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedSignatureRef = useRef<string | null>(null);
@@ -1096,7 +1086,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
   const currentStepRef = useRef<WizardStep>("identity");
   const signatureRef = useRef<string | null>(null);
 
-  const activeBugchudId = bugchudId ?? resolvedBugchudId;
+  const activeBugchudId = bugchudId;
   const character = useQuery(
     api.characters.getMine,
     isSignedIn && activeBugchudId ? { bugchudId: activeBugchudId } : "skip",
@@ -1143,57 +1133,6 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (bugchudId) {
-      setResolvedBugchudId(bugchudId);
-    }
-  }, [bugchudId]);
-
-  useEffect(() => {
-    if (bugchudId || resolvedBugchudId || !isLoaded || !isSignedIn || createStartedRef.current) {
-      return;
-    }
-
-    createStartedRef.current = true;
-    setPendingAction("Preparing draft");
-    setSurfaceError(null);
-    setSaveState("saving");
-    setSaveMessage("Creating draft");
-
-    void createDraft({})
-      .then((created) => {
-        if (!created) {
-          throw new Error("Draft creation returned no character.");
-        }
-
-        setResolvedBugchudId(created.bugchudId);
-        setStatus(created.status);
-        setCurrentStep(created.currentStep as WizardStep);
-        setDraft(cloneState(created.state));
-        setJsonEditors(buildJsonState(created.state));
-        const createdSignature = serializeDraftSignature(
-          created.state,
-          created.currentStep as WizardStep,
-        );
-        lastPersistedSignatureRef.current = createdSignature;
-        signatureRef.current = createdSignature;
-        setSaveState("saved");
-        setSaveMessage("Draft ready");
-        startTransition(() => {
-          router.replace(`/characters/${created.bugchudId}`);
-        });
-      })
-      .catch((error) => {
-        setSurfaceError(error instanceof Error ? error.message : "Draft creation failed.");
-        setSaveState("error");
-        setSaveMessage("Draft creation failed");
-        createStartedRef.current = false;
-      })
-      .finally(() => {
-        setPendingAction(null);
-      });
-  }, [bugchudId, createDraft, isLoaded, isSignedIn, resolvedBugchudId, router]);
 
   useEffect(() => {
     if (!character) {
@@ -1307,8 +1246,102 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
   }, [activeBugchudId, currentStep, draft, saveDraft, serializedDraft]);
 
   const previewState = preview?.normalizedState ?? draft;
-  const validationIssues = preview?.validation.issues ?? [];
+  const validationIssues = useMemo(
+    () => preview?.validation.issues ?? [],
+    [preview?.validation.issues],
+  );
   const currentPreviewState = draft && previewState ? previewState : null;
+  const suggestedDreams = useMemo(
+    () => (editorOptions && draft ? getSuggestedDreams(editorOptions, draft) : []),
+    [draft, editorOptions],
+  );
+  const combinedDreamRefs = useMemo(() => {
+    if (!draft) {
+      return [];
+    }
+
+    const combined = new Map(
+      draft.progression.dreamRefs.map((dreamRef) => [dreamRef.id, dreamRef]),
+    );
+    for (const dream of suggestedDreams) {
+      combined.set(dream.id, {
+        kind: "dream",
+        id: dream.id,
+      });
+    }
+    return [...combined.values()];
+  }, [draft, suggestedDreams]);
+  const hasEditorArcynePotential = useMemo(
+    () => hasArcynePotential(combinedDreamRefs),
+    [combinedDreamRefs],
+  );
+  const dreadTonguedAutoGrants = useMemo(
+    () =>
+      editorOptions
+        ? getDreadTonguedAutoGrants(editorOptions.steps.path.dreams, combinedDreamRefs)
+        : { active: false, languages: [], spellIds: [] as string[] },
+    [combinedDreamRefs, editorOptions],
+  );
+  const validSpellIds = useMemo(
+    () => new Set((editorOptions?.steps.path.spells ?? []).map((spell) => spell.id)),
+    [editorOptions],
+  );
+  const inventoryPlacementCatalog = useMemo<InventoryPlacementCatalog | null>(() => {
+    if (!editorOptions) {
+      return null;
+    }
+
+    return buildInventoryPlacementCatalog({
+      items: editorOptions.steps.gear.items,
+      weapons: editorOptions.steps.gear.weapons,
+      armors: editorOptions.steps.gear.armors,
+      shields: editorOptions.steps.gear.shields,
+      grimoires: editorOptions.steps.path.grimoires,
+      relics: editorOptions.steps.faith.relics,
+      containerDefinitions: editorOptions.steps.gear.containerDefinitions,
+    });
+  }, [editorOptions]);
+  const arcyneSpellSelection = useMemo(() => {
+    if (!draft) {
+      return resolveArcyneSpellSelection({
+        selectedKnownSpellIds: [],
+        preparedSlotsBySpellId: {},
+        validSpellIds,
+      });
+    }
+
+    const lockedKnownSpellIds = dreadTonguedAutoGrants.spellIds;
+    const lockedKnownSet = new Set(lockedKnownSpellIds);
+
+    return resolveArcyneSpellSelection({
+      selectedKnownSpellIds: draft.magic.knownSpellRefs
+        .map((spellRef) => spellRef.id)
+        .filter((spellId) => !lockedKnownSet.has(spellId)),
+      lockedKnownSpellIds,
+      preparedSlotsBySpellId: getPreparedSlotsBySpellIdFromState(draft),
+      validSpellIds,
+    });
+  }, [draft, dreadTonguedAutoGrants.spellIds, validSpellIds]);
+  const arcyneValidationIssues = useMemo(() => {
+    if (!hasEditorArcynePotential) {
+      return [];
+    }
+
+    return getArcyneSpellSelectionIssues(arcyneSpellSelection).map(
+      (message) =>
+        ({
+          severity: "error",
+          path: "magic.preparedSpellRefs",
+          message,
+        }) as ValidationIssue,
+    );
+  }, [arcyneSpellSelection, hasEditorArcynePotential]);
+  const allValidationIssues = useMemo(
+    () => [...validationIssues, ...arcyneValidationIssues],
+    [arcyneValidationIssues, validationIssues],
+  );
+  const isEditorValid =
+    Boolean(preview?.validation.ok) && arcyneValidationIssues.length === 0;
 
   const availableBackgrounds = useMemo(() => {
     if (!editorOptions || !draft) {
@@ -1316,6 +1349,79 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
     }
     return getBackgroundsForOrigin(editorOptions, draft.identity.originRef);
   }, [draft, editorOptions]);
+  const backgroundSelection = useMemo(
+    () =>
+      editorOptions && draft
+        ? buildBackgroundSelectionState({
+            originId: draft.identity.originRef.id,
+            selectedBackgroundIds: draft.identity.backgroundRefs.map((refValue) => refValue.id),
+            backgroundsByOrigin: editorOptions.steps.background.backgroundsByOrigin,
+            allBackgroundIds: editorOptions.steps.background.backgrounds.map(
+              (background) => background.id,
+            ),
+          })
+        : null,
+    [draft, editorOptions],
+  );
+
+  useEffect(() => {
+    if (!backgroundSelection) {
+      return;
+    }
+
+    setDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const currentBackgroundIds = current.identity.backgroundRefs.map((refValue) => refValue.id);
+      if (
+        arraysEqual(
+          currentBackgroundIds,
+          backgroundSelection.normalizedSelectedBackgroundIds,
+        )
+      ) {
+        return current;
+      }
+
+      const nextState = cloneState(current);
+      nextState.identity.backgroundRefs =
+        backgroundSelection.normalizedSelectedBackgroundIds.map((id) => ({
+          kind: "background",
+          id,
+        }));
+      return nextState;
+    });
+  }, [backgroundSelection]);
+
+  useEffect(() => {
+    if (!inventoryPlacementCatalog) {
+      return;
+    }
+
+    setDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextState = cloneState(current);
+      syncInventoryPlacementState(
+        nextState as unknown as CharacterInventoryPlacementState,
+        inventoryPlacementCatalog,
+      );
+
+      const currentPlacementSignature = JSON.stringify({
+        inventory: current.inventory,
+        loadout: current.loadout,
+      });
+      const nextPlacementSignature = JSON.stringify({
+        inventory: nextState.inventory,
+        loadout: nextState.loadout,
+      });
+
+      return currentPlacementSignature === nextPlacementSignature ? current : nextState;
+    });
+  }, [inventoryPlacementCatalog]);
 
   const inventoryCatalog = useMemo(() => {
     if (!editorOptions) {
@@ -1376,8 +1482,8 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
 
     return {
       identity: currentPreviewState.identity.name
-        ? `${currentPreviewState.identity.name} // ${(currentPreviewState.tags ?? []).length} tags`
-        : "Name, epithet, and tag scaffold",
+        ? `${currentPreviewState.identity.name} // ${currentPreviewState.identity.epithet ?? "Epithet pending"}`
+        : "Name, epithet, and faith label",
       lineage: `${race?.name ?? "Race pending"} // ${origin?.name ?? "Origin pending"}`,
       background: currentPreviewState.identity.backgroundRefs.length
         ? `${currentPreviewState.identity.backgroundRefs.length} backgrounds // ${(currentPreviewState.social.languages ?? []).length} languages`
@@ -1387,11 +1493,11 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
         ? `${patron.name} // ${currentPreviewState.faith.relicRefs.length} relics`
         : "Pantheon, patron, and vows",
       gear: `${currentPreviewState.inventory.items.length} inventory entries // ${Object.values(currentPreviewState.inventory.currency).reduce((total, amount) => total + amount, 0)} wealth`,
-      review: preview?.validation.ok
-        ? "Validation clear // ready to seal"
-        : `${validationIssues.length} issues require attention`,
+      review: isEditorValid
+        ? "Validation clear // ready to finalize"
+        : `${allValidationIssues.length} issues require attention`,
     };
-  }, [currentPreviewState, draft, editorOptions, preview?.validation.ok, validationIssues.length]);
+  }, [allValidationIssues.length, currentPreviewState, draft, editorOptions, isEditorValid]);
 
   function mutateDraft(mutator: (nextState: CharacterDraft) => void) {
     setDraft((current) => {
@@ -1402,6 +1508,30 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
       mutator(nextState);
       return nextState;
     });
+  }
+
+  function applyInventoryMutation(
+    mutator: (
+      nextState: CharacterDraft & CharacterInventoryPlacementState,
+      catalog: InventoryPlacementCatalog,
+    ) => void,
+  ) {
+    if (!draft || !inventoryPlacementCatalog) {
+      return;
+    }
+
+    try {
+      const nextState = cloneState(draft) as unknown as CharacterDraft &
+        CharacterInventoryPlacementState;
+      mutator(nextState, inventoryPlacementCatalog);
+      syncInventoryPlacementState(nextState, inventoryPlacementCatalog);
+      setDraft(nextState);
+      setSurfaceError(null);
+    } catch (error) {
+      setSurfaceError(
+        error instanceof Error ? error.message : "Inventory update failed.",
+      );
+    }
   }
 
   function handleAttributeRoll() {
@@ -1540,11 +1670,11 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
   }
 
   async function handleComplete() {
-    if (!activeBugchudId || !draftRef.current) {
+    if (!activeBugchudId || !draftRef.current || !isEditorValid) {
       return;
     }
 
-    setPendingAction("Sealing character");
+    setPendingAction(status === "complete" ? "Saving character" : "Finalizing character");
     setSurfaceError(null);
 
     try {
@@ -1563,12 +1693,12 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
         setJsonEditors(buildJsonState(saved.state));
         lastPersistedSignatureRef.current = serializeDraftSignature(saved.state, "review");
         setSaveState("saved");
-        setSaveMessage("Character sealed");
+        setSaveMessage(status === "complete" ? "Character saved" : "Character finalized");
       }
     } catch (error) {
       setSurfaceError(error instanceof Error ? error.message : "Character completion failed.");
       setSaveState("error");
-      setSaveMessage("Seal failed");
+      setSaveMessage(status === "complete" ? "Save failed" : "Finalize failed");
     } finally {
       setPendingAction(null);
     }
@@ -1578,7 +1708,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
     return (
       <LoadingState
         title="Syncing Session"
-        detail="Waiting for the auth conduit before opening the compact creator surface."
+        detail="Waiting for the auth conduit before opening the advanced editor workspace."
       />
     );
   }
@@ -1604,15 +1734,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
     return (
       <LoadingState
         title="Character Missing"
-        detail="This draft could not be reopened from your archive. Head back to the hub and create a fresh shell."
-        action={
-          <Button asChild variant="outline">
-            <Link href="/">
-              <ArrowLeftIcon data-icon="inline-start" />
-              Return to Frontchud
-            </Link>
-          </Button>
-        }
+        detail="This character could not be reopened from your archive."
       />
     );
   }
@@ -1620,8 +1742,8 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
   if (!activeBugchudId || !editorOptions || !draft || !jsonEditors || !currentPreviewState) {
     return (
       <LoadingState
-        title="Hydrating Creator"
-        detail="Pulling the ruleset registries, preview projection, and draft runtime into a compact single-page surface."
+        title="Hydrating Editor"
+        detail="Pulling the ruleset registries, preview projection, and saved runtime into the workspace editor."
       />
     );
   }
@@ -1655,15 +1777,30 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
       [origin.id, origin.group, ...(origin.homelandTags ?? [])],
     ),
   );
-  const backgroundOptions = availableBackgrounds.map((background) =>
-    toSearchOption(
-      background.id,
-      background.name,
-      renderOptionalSummary(background.summary),
-      background.narrativeRole,
-      [background.id, background.narrativeRole],
-    ),
-  );
+  const backgroundOptions = availableBackgrounds.map((background) => {
+    const selected =
+      draft.identity.backgroundRefs.some((refValue) => refValue.id === background.id);
+    const originLinked =
+      backgroundSelection?.originBackgroundIds.has(background.id) ?? false;
+    const disabled =
+      backgroundSelection
+        ? !backgroundSelection.selectableBackgroundIds.has(background.id)
+        : true;
+
+    return {
+      value: background.id,
+      label: background.name,
+      description: renderOptionalSummary(background.summary),
+      group: originLinked ? "Your origin" : "Other origins",
+      keywords: [background.id, background.narrativeRole],
+      disabled,
+      meta: selected ? (
+        <Badge variant="default">Selected</Badge>
+      ) : (
+        <Badge variant="outline">{originLinked ? "Origin-linked" : "Cross-origin"}</Badge>
+      ),
+    } satisfies SearchOption;
+  });
   const factionOptions = sortByName(editorOptions.steps.social.factions).map((faction) =>
     toSearchOption(faction.id, faction.name, renderOptionalSummary(faction.summary), "Factions", [faction.id]),
   );
@@ -1731,138 +1868,100 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
     toSearchOption(relic.id, relic.name, renderOptionalSummary(relic.summary), "Relics", [relic.id]),
   );
 
-  const ownedInventoryOptions = draft.inventory.items.map((item) =>
-    toSearchOption(
-      refKey(item.ref),
-      inventoryLabelFromRef(editorOptions, item.ref),
-      `Qty ${item.quantity}${item.charges ? ` // Charges ${item.charges}` : ""}`,
-      String(item.ref.kind).toUpperCase(),
-      [item.ref.id, String(item.ref.kind)],
-    ),
-  );
-  const weaponSlotOptions = draft.inventory.items
-    .filter((item) => item.ref.kind === "weapon")
-    .map((item) =>
-      toSearchOption(
+  const legacyEquippedOptions = [...new Map(
+    draft.inventory.items
+      .filter((item) => isLegacyEquippableRef(item.ref))
+      .map((item) => [
         refKey(item.ref),
-        inventoryLabelFromRef(editorOptions, item.ref),
-        `Qty ${item.quantity}`,
-        "Weapon slots",
-        [item.ref.id],
-      ),
-    );
-  const armorSlotOptions = draft.inventory.items
-    .filter((item) => item.ref.kind === "armor")
-    .map((item) =>
-      toSearchOption(
-        refKey(item.ref),
-        inventoryLabelFromRef(editorOptions, item.ref),
-        `Qty ${item.quantity}`,
-        "Armor slots",
-        [item.ref.id],
-      ),
-    );
-  const shieldSlotOptions = draft.inventory.items
-    .filter((item) => item.ref.kind === "shield")
-    .map((item) =>
-      toSearchOption(
-        refKey(item.ref),
-        inventoryLabelFromRef(editorOptions, item.ref),
-        `Qty ${item.quantity}`,
-        "Shield slots",
-        [item.ref.id],
-      ),
-    );
+        toSearchOption(
+          refKey(item.ref),
+          inventoryLabelFromRef(editorOptions, item.ref),
+          `Owned in inventory${item.quantity > 1 ? ` // Qty ${item.quantity}` : ""}`,
+          "Legacy equipped",
+          [item.ref.id, String(item.ref.kind)],
+        ),
+      ]),
+  ).values()];
+  const inventoryStackViews = draft.inventory.items.map((item, index) => ({
+    index,
+    item,
+    key: buildInventoryStackKey(item, index),
+    label: inventoryLabelFromRef(editorOptions, item.ref),
+    placement:
+      item.containerId && draft.inventory.containers.find((entry) => entry.id === item.containerId)
+        ? `Contained: ${draft.inventory.containers.find((entry) => entry.id === item.containerId)?.label}`
+        : getInventoryPlacementLabel(item),
+  }));
 
   return (
-    <div className="relative min-h-screen overflow-x-clip">
-      <div className="grain-overlay pointer-events-none fixed inset-0 z-0" />
+    <div className="flex min-w-0 flex-col gap-4">
+      <header className="flex flex-col gap-4 border-b border-border/20 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">Advanced editor</Badge>
+              <Badge variant="ghost">Ruleset v{editorOptions.rulesetVersion}</Badge>
+              <Badge variant="ghost">{activeBugchudId}</Badge>
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-display text-3xl font-black tracking-[-0.06em] text-primary sm:text-4xl">
+                {draft.identity.name || "Untitled Character"}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                Full-state editing with autosave, preview validation, and searchable registry controls.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SaveStatusBadge saveState={saveState} saveMessage={saveMessage} />
+            <Button
+              onClick={() => void handleComplete()}
+              disabled={!isEditorValid || Boolean(pendingAction)}
+            >
+              <ShieldCheckIcon data-icon="inline-start" />
+              {status === "complete" ? "Save" : "Finalize"}
+            </Button>
+          </div>
+        </div>
 
-      <main className="relative z-10 px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-[108rem] flex-col gap-6 xl:flex-row">
-          <div className="min-w-0 flex-1">
-            <header className="mb-6 flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" asChild>
-                    <Link href="/">
-                      <ArrowLeftIcon data-icon="inline-start" />
-                      Hub
-                    </Link>
-                  </Button>
-                  <Button variant="outline" onClick={() => router.refresh()}>
-                    <ArrowClockwiseIcon data-icon="inline-start" />
-                    Refresh
-                  </Button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SaveStatusBadge saveState={saveState} saveMessage={saveMessage} />
-                  <Button
-                    onClick={() => void handleComplete()}
-                    disabled={!preview?.validation.ok || Boolean(pendingAction)}
-                  >
-                    <ShieldCheckIcon data-icon="inline-start" />
-                    {status === "complete" ? "Reseal Character" : "Seal Character"}
-                  </Button>
-                </div>
-              </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <MetricCard label="Current Section" value={STEP_META[currentStep].label} />
+          <MetricCard label="Validation Issues" value={String(allValidationIssues.length)} />
+          <MetricCard label="Draft State" value={status.toUpperCase()} />
+        </div>
 
-              <Card className="module-cut ritual-surface-strong border border-border/20">
-                <CardHeader className="gap-4 border-b border-border/20 pb-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">Compact creator</Badge>
-                    <Badge variant="ghost">Ruleset v{editorOptions.rulesetVersion}</Badge>
-                    <Badge variant="ghost">{activeBugchudId}</Badge>
-                  </div>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="min-w-0">
-                      <CardTitle className="font-display text-4xl font-black tracking-[-0.07em] text-primary sm:text-5xl">
-                        {draft.identity.name || "Character Creator"}
-                      </CardTitle>
-                      <CardDescription className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                        One page, compact controls, autosaving draft state, and searchable selectors for every major registry pick.
-                      </CardDescription>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <MetricCard label="Current Section" value={STEP_META[currentStep].label} />
-                      <MetricCard label="Validation Issues" value={String(validationIssues.length)} />
-                      <MetricCard label="Draft State" value={status.toUpperCase()} />
-                    </div>
-                  </div>
-                  {surfaceError ? (
-                    <Card size="sm" className="border border-secondary/40 bg-secondary/12">
-                      <CardHeader className="gap-2">
-                        <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-secondary">
-                          <WarningCircleIcon />
-                          Draft issue
-                        </CardTitle>
-                        <CardDescription className="text-xs leading-6 text-secondary-foreground">
-                          {surfaceError}
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  ) : null}
-                  {pendingAction ? (
-                    <Badge variant="outline" className="w-fit">
-                      {pendingAction}
-                    </Badge>
-                  ) : null}
-                </CardHeader>
-              </Card>
-            </header>
+        {surfaceError ? (
+          <Card size="sm" className="border border-secondary/40 bg-secondary/12">
+            <CardHeader className="gap-2">
+              <CardTitle className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-secondary">
+                <WarningCircleIcon />
+                Draft issue
+              </CardTitle>
+              <CardDescription className="text-xs leading-6 text-secondary-foreground">
+                {surfaceError}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
+        {pendingAction ? (
+          <Badge variant="outline" className="w-fit">
+            {pendingAction}
+          </Badge>
+        ) : null}
+      </header>
 
-            <SummaryPanel
-              className="mb-6 xl:hidden"
-              draft={draft}
-              preview={preview}
-              options={editorOptions}
-              validationIssues={validationIssues}
-              saveState={saveState}
-              saveMessage={saveMessage}
-            />
+        <SummaryPanel
+          className="xl:hidden"
+          draft={draft}
+          preview={preview}
+          options={editorOptions}
+          validationIssues={allValidationIssues}
+        />
 
-            <Card className="module-cut ritual-surface-strong border border-border/20">
-              <CardContent className="px-0 py-0">
+      <div className="flex flex-col gap-4 xl:flex-row">
+        <div className="min-w-0 flex-1">
+          <Card className="border border-border/20 bg-background/65">
+            <CardContent className="px-0 py-0">
                 <Accordion
                   type="single"
                   value={currentStep}
@@ -1924,17 +2023,6 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                         })
                                       }
                                       placeholder="Ash Cathedral initiate"
-                                    />
-                                    <CompactTextField
-                                      id="character-tags"
-                                      label="Tags"
-                                      value={(draft.tags ?? []).join(", ")}
-                                      onChange={(value) =>
-                                        mutateDraft((nextState) => {
-                                          nextState.tags = parseCommaList(value);
-                                        })
-                                      }
-                                      placeholder="industrial, void-touched"
                                     />
                                   </FieldGroup>
                                 </CardContent>
@@ -2020,12 +2108,25 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                         }
                                         mutateDraft((nextState) => {
                                           nextState.identity.originRef = { kind: "origin", id: origin.id };
-                                          nextState.identity.backgroundRefs = nextState.identity.backgroundRefs.filter(
-                                            (refValue) =>
-                                              origin.availableBackgroundRefs.some(
-                                                (availableRef) => availableRef.id === refValue.id,
-                                              ),
-                                          );
+                                          const normalizedBackgroundIds =
+                                            normalizeBackgroundSelection({
+                                              originId: origin.id,
+                                              selectedBackgroundIds:
+                                                nextState.identity.backgroundRefs.map(
+                                                  (refValue) => refValue.id,
+                                                ),
+                                              backgroundsByOrigin:
+                                                editorOptions.steps.background.backgroundsByOrigin,
+                                              allBackgroundIds:
+                                                editorOptions.steps.background.backgrounds.map(
+                                                  (background) => background.id,
+                                                ),
+                                            });
+                                          nextState.identity.backgroundRefs =
+                                            normalizedBackgroundIds.map((id) => ({
+                                              kind: "background",
+                                              id,
+                                            }));
                                           nextState.social.languages = [
                                             ...new Set([
                                               ...nextState.social.languages,
@@ -2034,7 +2135,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                           ];
                                         });
                                       }}
-                                      description="Changing origin immediately prunes backgrounds that are no longer valid."
+                                      description="Changing origin keeps only background packages that still fit the current origin and cross-origin limits."
                                     />
                                   </FieldGroup>
                                 </CardContent>
@@ -2078,7 +2179,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                   <div className="grid gap-4 xl:grid-cols-3">
                                     {ROLL_ATTRIBUTE_KEYS.map((key, rollIndex) => {
                                       const rule = selectedRaceRollProfile.supported
-                                        ? selectedRaceRollProfile.rules[key]
+                                        ? selectedRaceRollProfile.rules?.[key] ?? null
                                         : null;
                                       const triplet = displayedAttributeRolls?.[key];
                                       const resolvedValue =
@@ -2214,12 +2315,25 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                       values={draft.identity.backgroundRefs.map((refValue) => refValue.id)}
                                       onChange={(backgroundIds) =>
                                         mutateDraft((nextState) => {
-                                          nextState.identity.backgroundRefs = backgroundIds.map((id) => ({
+                                          const normalizedBackgroundIds =
+                                            normalizeBackgroundSelection({
+                                              originId: nextState.identity.originRef.id,
+                                              selectedBackgroundIds: backgroundIds,
+                                              backgroundsByOrigin:
+                                                editorOptions.steps.background.backgroundsByOrigin,
+                                              allBackgroundIds:
+                                                editorOptions.steps.background.backgrounds.map(
+                                                  (background) => background.id,
+                                                ),
+                                            });
+                                          nextState.identity.backgroundRefs =
+                                            normalizedBackgroundIds.map((id) => ({
                                             kind: "background",
                                             id,
                                           }));
                                           const selectedBackgrounds = editorOptions.steps.background.backgrounds.filter(
-                                            (background) => backgroundIds.includes(background.id),
+                                            (background) =>
+                                              normalizedBackgroundIds.includes(background.id),
                                           );
                                           nextState.social.reputationTags = [
                                             ...new Set([
@@ -2231,7 +2345,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                           ];
                                         })
                                       }
-                                      description="Background choices are filtered by the active origin."
+                                      description={`Choose up to ${MAX_BACKGROUND_SELECTIONS}. At least one must match the active origin, and no more than one can be cross-origin.`}
                                     />
 
                                     <FieldGroup className="gap-4 md:grid md:grid-cols-2">
@@ -2261,6 +2375,99 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                               </Card>
 
                               <div className="grid gap-4 lg:grid-cols-2">
+                                <Card size="sm" className="border border-border/20 bg-card/55 lg:col-span-2">
+                                  <CardHeader className="gap-2">
+                                    <CardTitle className="text-xs uppercase tracking-[0.28em] text-primary">
+                                      Followers
+                                    </CardTitle>
+                                    <CardDescription className="text-xs leading-6 text-muted-foreground">
+                                      Track starting entourages like Archon cutthroats without dropping into raw JSON.
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="flex flex-col gap-4 py-2">
+                                    {draft.social.followers.length ? (
+                                      <div className="flex flex-col gap-3">
+                                        {draft.social.followers.map((follower, followerIndex) => (
+                                          <div
+                                            key={`follower-${followerIndex}-${follower.label}`}
+                                            className="grid gap-3 rounded-none border border-border/20 bg-background/45 px-3 py-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]"
+                                          >
+                                            <CompactTextField
+                                              id={`background-follower-label-${followerIndex}`}
+                                              label="Label"
+                                              value={follower.label}
+                                              onChange={(value) =>
+                                                mutateDraft((nextState) => {
+                                                  nextState.social.followers[followerIndex] = {
+                                                    ...nextState.social.followers[followerIndex],
+                                                    label: value,
+                                                  };
+                                                })
+                                              }
+                                            />
+                                            <NumberField
+                                              id={`background-follower-quantity-${followerIndex}`}
+                                              label="Quantity"
+                                              min={1}
+                                              value={follower.quantity}
+                                              onChange={(value) =>
+                                                mutateDraft((nextState) => {
+                                                  nextState.social.followers[followerIndex] = {
+                                                    ...nextState.social.followers[followerIndex],
+                                                    quantity: Math.max(1, value),
+                                                  };
+                                                })
+                                              }
+                                            />
+                                            <div className="flex items-end">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() =>
+                                                  mutateDraft((nextState) => {
+                                                    nextState.social.followers =
+                                                      nextState.social.followers.filter(
+                                                        (_, index) => index !== followerIndex,
+                                                      );
+                                                  })
+                                                }
+                                              >
+                                                Remove
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[0.72rem] leading-6 text-muted-foreground">
+                                        No followers recorded on this draft yet.
+                                      </p>
+                                    )}
+
+                                    <div className="flex justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          mutateDraft((nextState) => {
+                                            nextState.social.followers = [
+                                              ...nextState.social.followers,
+                                              {
+                                                label: "",
+                                                quantity: 1,
+                                              },
+                                            ];
+                                          })
+                                        }
+                                      >
+                                        Add follower
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+
                                 <Card size="sm" className="border border-border/20 bg-card/55">
                                   <CardContent className="py-4">
                                     <SearchableMultiSelect
@@ -2439,42 +2646,91 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                 </Card>
                               </div>
 
-                              <div className="grid gap-4 xl:grid-cols-2">
-                                <Card size="sm" className="border border-border/20 bg-card/55">
-                                  <CardContent className="py-4">
-                                    <SearchableMultiSelect
-                                      label="Known Spells"
-                                      options={spellOptions}
-                                      values={draft.magic.knownSpellRefs.map((refValue) => refValue.id)}
-                                      onChange={(spellIds) =>
-                                        mutateDraft((nextState) => {
-                                          nextState.magic.knownSpellRefs = spellIds.map((id) => ({
-                                            kind: "spell",
-                                            id,
-                                          }));
-                                        })
-                                      }
-                                    />
-                                  </CardContent>
-                                </Card>
-                                <Card size="sm" className="border border-border/20 bg-card/55">
-                                  <CardContent className="py-4">
-                                    <SearchableMultiSelect
-                                      label="Prepared Spells"
-                                      options={spellOptions}
-                                      values={draft.magic.preparedSpellRefs.map((refValue) => refValue.id)}
-                                      onChange={(spellIds) =>
-                                        mutateDraft((nextState) => {
-                                          nextState.magic.preparedSpellRefs = spellIds.map((id) => ({
-                                            kind: "spell",
-                                            id,
-                                          }));
-                                        })
-                                      }
-                                    />
-                                  </CardContent>
-                                </Card>
-                              </div>
+                              {hasEditorArcynePotential ? (
+                                <ArcyneSpellSelector
+                                  spells={editorOptions.steps.path.spells}
+                                  selectedKnownSpellIds={arcyneSpellSelection.selectedKnownSpellIds}
+                                  lockedKnownSpellIds={arcyneSpellSelection.lockedKnownSpellIds}
+                                  preparedSlotsBySpellId={arcyneSpellSelection.preparedSlotsBySpellId}
+                                  onKnownSpellIdsChange={(spellIds) =>
+                                    mutateDraft((nextState) => {
+                                      const nextSelection = resolveArcyneSpellSelection({
+                                        selectedKnownSpellIds: spellIds,
+                                        lockedKnownSpellIds:
+                                          arcyneSpellSelection.lockedKnownSpellIds,
+                                        preparedSlotsBySpellId:
+                                          getPreparedSlotsBySpellIdFromState(nextState),
+                                        validSpellIds,
+                                      });
+                                      applyResolvedArcyneSpellSelectionToState(
+                                        nextState,
+                                        nextSelection,
+                                      );
+                                    })
+                                  }
+                                  onPreparedSlotsBySpellIdChange={(preparedSlotsBySpellId) =>
+                                    mutateDraft((nextState) => {
+                                      const nextSelection = resolveArcyneSpellSelection({
+                                        selectedKnownSpellIds:
+                                          arcyneSpellSelection.selectedKnownSpellIds,
+                                        lockedKnownSpellIds:
+                                          arcyneSpellSelection.lockedKnownSpellIds,
+                                        preparedSlotsBySpellId,
+                                        validSpellIds,
+                                      });
+                                      applyResolvedArcyneSpellSelectionToState(
+                                        nextState,
+                                        nextSelection,
+                                      );
+                                    })
+                                  }
+                                  description={`Spell preparation is locked to the known pool here. Allocate exactly ${ARCYNE_PREPARED_SLOT_TOTAL} slots to keep this arcyne draft battle-ready.`}
+                                  issueText={
+                                    arcyneValidationIssues.length
+                                      ? arcyneValidationIssues
+                                          .map((issue) => issue.message)
+                                          .join(" ")
+                                      : null
+                                  }
+                                />
+                              ) : (
+                                <div className="grid gap-4 xl:grid-cols-2">
+                                  <Card size="sm" className="border border-border/20 bg-card/55">
+                                    <CardContent className="py-4">
+                                      <SearchableMultiSelect
+                                        label="Known Spells"
+                                        options={spellOptions}
+                                        values={draft.magic.knownSpellRefs.map((refValue) => refValue.id)}
+                                        onChange={(spellIds) =>
+                                          mutateDraft((nextState) => {
+                                            nextState.magic.knownSpellRefs = spellIds.map((id) => ({
+                                              kind: "spell",
+                                              id,
+                                            }));
+                                          })
+                                        }
+                                      />
+                                    </CardContent>
+                                  </Card>
+                                  <Card size="sm" className="border border-border/20 bg-card/55">
+                                    <CardContent className="py-4">
+                                      <SearchableMultiSelect
+                                        label="Prepared Spells"
+                                        options={spellOptions}
+                                        values={draft.magic.preparedSpellRefs.map((refValue) => refValue.id)}
+                                        onChange={(spellIds) =>
+                                          mutateDraft((nextState) => {
+                                            nextState.magic.preparedSpellRefs = spellIds.map((id) => ({
+                                              kind: "spell",
+                                              id,
+                                            }));
+                                          })
+                                        }
+                                      />
+                                    </CardContent>
+                                  </Card>
+                                </div>
+                              )}
 
                               <Accordion type="multiple" className="border border-border/20 bg-card/55 px-4">
                                 <AccordionItem value="path-advanced" className="border-border/20">
@@ -2821,107 +3077,122 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                               </Card>
 
                               <Card size="sm" className="border border-border/20 bg-card/55">
-                                <CardContent className="py-4">
-                                  <SearchableMultiSelect
-                                    label="Owned Inventory"
+                                <CardContent className="flex flex-col gap-4 py-4">
+                                  <SearchableSingleSelect
+                                    label="Add Inventory Stack"
                                     options={inventoryCatalog}
-                                    values={draft.inventory.items.map((item) => refKey(item.ref))}
-                                    onChange={(nextKeys) =>
-                                      mutateDraft((nextState) => {
-                                        syncInventorySelection(nextState, inventoryOptionMap, nextKeys);
-                                      })
-                                    }
-                                    description="Use the searchable catalog to add or remove owned items, weapons, armor, and shields."
-                                    maxHeightClassName="max-h-96"
+                                    value={inventoryCatalogSelection}
+                                    onChange={setInventoryCatalogSelection}
+                                    placeholder="Search inventory definitions"
+                                    description="Each add creates a fresh draft stack. Remove or edit stacks from the ledger below."
                                   />
+                                  <div className="flex justify-end">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={!inventoryCatalogSelection}
+                                      onClick={() => {
+                                        const selected = inventoryCatalogSelection
+                                          ? inventoryOptionMap.get(inventoryCatalogSelection)
+                                          : undefined;
+                                        if (!selected) {
+                                          return;
+                                        }
+
+                                        applyInventoryMutation((nextState, catalog) => {
+                                          appendInventoryStack(
+                                            nextState,
+                                            selected.ref as InventoryOwnedRef,
+                                            catalog,
+                                          );
+                                        });
+                                        setInventoryCatalogSelection(undefined);
+                                      }}
+                                    >
+                                      Add stack
+                                    </Button>
+                                  </div>
                                 </CardContent>
                               </Card>
 
                               <Card size="sm" className="border border-border/20 bg-card/55">
                                 <CardContent className="grid gap-5 py-4 lg:grid-cols-2">
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <MetricCard
+                                      label="Primary Weapon"
+                                      value={
+                                        draft.loadout.primaryWeaponRef
+                                          ? inventoryLabelFromRef(
+                                              editorOptions,
+                                              draft.loadout.primaryWeaponRef,
+                                            )
+                                          : "NONE"
+                                      }
+                                    />
+                                    <MetricCard
+                                      label="Secondary Weapon"
+                                      value={
+                                        draft.loadout.secondaryWeaponRef
+                                          ? inventoryLabelFromRef(
+                                              editorOptions,
+                                              draft.loadout.secondaryWeaponRef,
+                                            )
+                                          : "NONE"
+                                      }
+                                    />
+                                    <MetricCard
+                                      label="Armor"
+                                      value={
+                                        draft.loadout.armorRef
+                                          ? inventoryLabelFromRef(
+                                              editorOptions,
+                                              draft.loadout.armorRef,
+                                            )
+                                          : "NONE"
+                                      }
+                                    />
+                                    <MetricCard
+                                      label="Shield"
+                                      value={
+                                        draft.loadout.shieldRef
+                                          ? inventoryLabelFromRef(
+                                              editorOptions,
+                                              draft.loadout.shieldRef,
+                                            )
+                                          : "NONE"
+                                      }
+                                    />
+                                  </div>
+
                                   <SearchableMultiSelect
-                                    label="Equipped Items"
-                                    options={ownedInventoryOptions}
-                                    values={draft.loadout.equippedItemRefs.map((entry) => refKey(entry))}
+                                    label="Legacy Equipped Relics & Grimoires"
+                                    options={legacyEquippedOptions}
+                                    values={draft.loadout.equippedItemRefs
+                                      .filter((entry) => isLegacyEquippableRef(entry))
+                                      .map((entry) => refKey(entry))}
                                     onChange={(itemKeys) =>
-                                      mutateDraft((nextState) => {
-                                        nextState.loadout.equippedItemRefs = itemKeys
+                                      applyInventoryMutation((nextState, catalog) => {
+                                        const nextLegacyRefs = itemKeys
                                           .map((itemKey) =>
                                             nextState.inventory.items.find(
                                               (entry) => refKey(entry.ref) === itemKey,
                                             )?.ref,
                                           )
                                           .filter(
-                                            (refValue): refValue is (typeof nextState.loadout.equippedItemRefs)[number] =>
+                                            (refValue): refValue is InventoryOwnedRef =>
                                               Boolean(refValue),
                                           );
+                                        setLegacyNonCombatEquippedRefs(
+                                          nextState,
+                                          nextLegacyRefs,
+                                          catalog,
+                                        );
                                       })
                                     }
-                                    placeholder="Choose equipped items"
+                                    placeholder="Choose legacy non-combat refs"
+                                    description="Combat gear is projected from stack placement. Only legacy non-combat refs remain directly editable here."
                                   />
-
-                                  <FieldGroup className="gap-4">
-                                    <SearchableSingleSelect
-                                      label="Primary Weapon"
-                                      options={weaponSlotOptions}
-                                      value={draft.loadout.primaryWeaponRef ? refKey(draft.loadout.primaryWeaponRef) : undefined}
-                                      onChange={(value) =>
-                                        mutateDraft((nextState) => {
-                                          const target = nextState.inventory.items.find(
-                                            (entry) => refKey(entry.ref) === value,
-                                          );
-                                          nextState.loadout.primaryWeaponRef =
-                                            (target?.ref as RegistryRef<"weapon"> | undefined) ?? undefined;
-                                        })
-                                      }
-                                      placeholder="Unassigned"
-                                    />
-                                    <SearchableSingleSelect
-                                      label="Secondary Weapon"
-                                      options={weaponSlotOptions}
-                                      value={draft.loadout.secondaryWeaponRef ? refKey(draft.loadout.secondaryWeaponRef) : undefined}
-                                      onChange={(value) =>
-                                        mutateDraft((nextState) => {
-                                          const target = nextState.inventory.items.find(
-                                            (entry) => refKey(entry.ref) === value,
-                                          );
-                                          nextState.loadout.secondaryWeaponRef =
-                                            (target?.ref as RegistryRef<"weapon"> | undefined) ?? undefined;
-                                        })
-                                      }
-                                      placeholder="Unassigned"
-                                    />
-                                    <SearchableSingleSelect
-                                      label="Armor"
-                                      options={armorSlotOptions}
-                                      value={draft.loadout.armorRef ? refKey(draft.loadout.armorRef) : undefined}
-                                      onChange={(value) =>
-                                        mutateDraft((nextState) => {
-                                          const target = nextState.inventory.items.find(
-                                            (entry) => refKey(entry.ref) === value,
-                                          );
-                                          nextState.loadout.armorRef =
-                                            (target?.ref as RegistryRef<"armor"> | undefined) ?? undefined;
-                                        })
-                                      }
-                                      placeholder="Unassigned"
-                                    />
-                                    <SearchableSingleSelect
-                                      label="Shield"
-                                      options={shieldSlotOptions}
-                                      value={draft.loadout.shieldRef ? refKey(draft.loadout.shieldRef) : undefined}
-                                      onChange={(value) =>
-                                        mutateDraft((nextState) => {
-                                          const target = nextState.inventory.items.find(
-                                            (entry) => refKey(entry.ref) === value,
-                                          );
-                                          nextState.loadout.shieldRef =
-                                            (target?.ref as RegistryRef<"shield"> | undefined) ?? undefined;
-                                        })
-                                      }
-                                      placeholder="Unassigned"
-                                    />
-                                  </FieldGroup>
                                 </CardContent>
                               </Card>
 
@@ -2946,7 +3217,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                             variant="outline"
                                             size="sm"
                                             onClick={() =>
-                                              mutateDraft((nextState) => {
+                                              applyInventoryMutation((nextState, catalog) => {
                                                 nextState.inventory.containers = [
                                                   ...nextState.inventory.containers,
                                                   {
@@ -2956,6 +3227,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                                     occupiedSlots: 0,
                                                   },
                                                 ];
+                                                syncInventoryPlacementState(nextState, catalog);
                                               })
                                             }
                                           >
@@ -2964,108 +3236,298 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                         ))}
                                       </div>
 
-                                      {draft.inventory.items.length ? (
+                                      {inventoryStackViews.length ? (
                                         <div className="flex flex-col gap-4">
-                                          {draft.inventory.items.map((item) => (
-                                            <Card
-                                              key={refKey(item.ref)}
-                                              size="sm"
-                                              className="border border-border/20 bg-background/50"
-                                            >
-                                              <CardHeader className="gap-2">
-                                                <CardTitle className="text-xs uppercase tracking-[0.24em] text-accent">
-                                                  {inventoryLabelFromRef(editorOptions, item.ref)}
-                                                </CardTitle>
-                                                <CardDescription className="text-[0.72rem] uppercase tracking-[0.2em] text-muted-foreground">
-                                                  {String(item.ref.kind)}
-                                                </CardDescription>
-                                              </CardHeader>
-                                              <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                                                <NumberField
-                                                  id={`inventory-qty-${refKey(item.ref)}`}
-                                                  label="Qty"
-                                                  value={item.quantity}
-                                                  onChange={(value) =>
-                                                    mutateDraft((nextState) => {
-                                                      const target = nextState.inventory.items.find((entry) =>
-                                                        isSameRef(entry.ref, item.ref),
-                                                      );
-                                                      if (target) {
-                                                        target.quantity = value;
-                                                      }
-                                                    })
-                                                  }
-                                                />
-                                                <NumberField
-                                                  id={`inventory-charges-${refKey(item.ref)}`}
-                                                  label="Charges"
-                                                  value={item.charges ?? 0}
-                                                  onChange={(value) =>
-                                                    mutateDraft((nextState) => {
-                                                      const target = nextState.inventory.items.find((entry) =>
-                                                        isSameRef(entry.ref, item.ref),
-                                                      );
-                                                      if (target) {
-                                                        target.charges = value || undefined;
-                                                      }
-                                                    })
-                                                  }
-                                                />
-                                                <CompactTextField
-                                                  id={`inventory-container-${refKey(item.ref)}`}
-                                                  label="Container"
-                                                  value={item.containerId ?? ""}
-                                                  onChange={(value) =>
-                                                    mutateDraft((nextState) => {
-                                                      const target = nextState.inventory.items.find((entry) =>
-                                                        isSameRef(entry.ref, item.ref),
-                                                      );
-                                                      if (target) {
-                                                        target.containerId = value || undefined;
-                                                      }
-                                                    })
-                                                  }
-                                                />
-                                                <Field>
-                                                  <FieldLabel>Remove</FieldLabel>
-                                                  <Button
-                                                    variant="destructive"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                      mutateDraft((nextState) => {
-                                                        nextState.inventory.items = nextState.inventory.items.filter(
-                                                          (entry) => !isSameRef(entry.ref, item.ref),
-                                                        );
-                                                        nextState.loadout.equippedItemRefs =
-                                                          nextState.loadout.equippedItemRefs.filter(
-                                                            (entry) => !isSameRef(entry, item.ref),
+                                          {inventoryStackViews.map((view) => {
+                                            const item = view.item;
+                                            const weaponDefinition =
+                                              item.ref.kind === "weapon"
+                                                ? findById(editorOptions.steps.gear.weapons, item.ref.id)
+                                                : undefined;
+                                            const containerOptions = draft.inventory.containers.map((container) =>
+                                              toSearchOption(
+                                                container.id,
+                                                container.label,
+                                                `${container.occupiedSlots}/${container.capacity} used`,
+                                                "Containers",
+                                                [container.id, container.label],
+                                              ),
+                                            );
+
+                                            return (
+                                              <Card
+                                                key={view.key}
+                                                size="sm"
+                                                className="border border-border/20 bg-background/50"
+                                              >
+                                                <CardHeader className="gap-2">
+                                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <CardTitle className="text-xs uppercase tracking-[0.24em] text-accent">
+                                                      {view.label}
+                                                    </CardTitle>
+                                                    <Badge variant="outline">{view.placement}</Badge>
+                                                  </div>
+                                                  <CardDescription className="text-[0.72rem] uppercase tracking-[0.2em] text-muted-foreground">
+                                                    {String(item.ref.kind)}
+                                                  </CardDescription>
+                                                </CardHeader>
+                                                <CardContent className="flex flex-col gap-4">
+                                                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                                    <NumberField
+                                                      id={`inventory-qty-${view.key}`}
+                                                      label="Qty"
+                                                      min={1}
+                                                      value={item.quantity}
+                                                      disabled={Boolean(item.equippedSlot)}
+                                                      description={item.equippedSlot ? "Equipped stacks stay at 1." : undefined}
+                                                      onChange={(value) =>
+                                                        applyInventoryMutation((nextState, catalog) => {
+                                                          updateInventoryStackQuantity(
+                                                            nextState,
+                                                            view.index,
+                                                            Math.max(1, value),
+                                                            catalog,
                                                           );
-                                                        if (isSameRef(nextState.loadout.primaryWeaponRef, item.ref)) {
-                                                          nextState.loadout.primaryWeaponRef = undefined;
+                                                        })
+                                                      }
+                                                    />
+                                                    <NumberField
+                                                      id={`inventory-charges-${view.key}`}
+                                                      label="Charges"
+                                                      min={1}
+                                                      value={item.charges ?? 0}
+                                                      onChange={(value) =>
+                                                        applyInventoryMutation((nextState, catalog) => {
+                                                          updateInventoryStackCharges(
+                                                            nextState,
+                                                            view.index,
+                                                            value > 0 ? value : undefined,
+                                                            catalog,
+                                                          );
+                                                        })
+                                                      }
+                                                    />
+                                                    <SearchableSingleSelect
+                                                      label="Move To Container"
+                                                      options={containerOptions}
+                                                      value={undefined}
+                                                      onChange={(value) => {
+                                                        if (!value) {
+                                                          return;
                                                         }
-                                                        if (isSameRef(nextState.loadout.secondaryWeaponRef, item.ref)) {
-                                                          nextState.loadout.secondaryWeaponRef = undefined;
+                                                        applyInventoryMutation((nextState, catalog) => {
+                                                          moveInventoryStackToContainerAtIndex(
+                                                            nextState,
+                                                            view.index,
+                                                            value,
+                                                            catalog,
+                                                          );
+                                                        });
+                                                      }}
+                                                      placeholder={containerOptions.length ? "Choose container" : "No containers"}
+                                                      disabled={
+                                                        !containerOptions.length ||
+                                                        Boolean(item.containerId) ||
+                                                        Boolean(item.equippedSlot)
+                                                      }
+                                                      description={
+                                                        item.containerId
+                                                          ? "Already stored in a container."
+                                                          : item.equippedSlot
+                                                            ? "Stow this stack before moving it into a container."
+                                                            : "Moves one unit and splits the stack when needed."
+                                                      }
+                                                    />
+                                                    <Field>
+                                                      <FieldLabel>Remove</FieldLabel>
+                                                      <Button
+                                                        type="button"
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          applyInventoryMutation((nextState, catalog) => {
+                                                            removeInventoryStackAtIndex(
+                                                              nextState,
+                                                              view.index,
+                                                              catalog,
+                                                            );
+                                                          })
                                                         }
-                                                        if (isSameRef(nextState.loadout.armorRef, item.ref)) {
-                                                          nextState.loadout.armorRef = undefined;
+                                                      >
+                                                        Remove stack
+                                                      </Button>
+                                                    </Field>
+                                                  </div>
+
+                                                  <div className="flex flex-wrap gap-2">
+                                                    {item.ref.kind === "weapon" &&
+                                                    !item.containerId &&
+                                                    !item.equippedSlot ? (
+                                                      <>
+                                                        <Button
+                                                          type="button"
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() =>
+                                                            applyInventoryMutation((nextState, catalog) => {
+                                                              equipInventoryStackAtIndex(
+                                                                nextState,
+                                                                view.index,
+                                                                "mainHand",
+                                                                catalog,
+                                                              );
+                                                            })
+                                                          }
+                                                        >
+                                                          Equip main hand
+                                                        </Button>
+                                                        {weaponDefinition?.handedness === "oneHanded" ? (
+                                                          <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                              applyInventoryMutation((nextState, catalog) => {
+                                                                equipInventoryStackAtIndex(
+                                                                  nextState,
+                                                                  view.index,
+                                                                  "offHand",
+                                                                  catalog,
+                                                                );
+                                                              })
+                                                            }
+                                                          >
+                                                            Equip off hand
+                                                          </Button>
+                                                        ) : null}
+                                                        {weaponDefinition?.handedness === "twoHanded" ? (
+                                                          <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                              applyInventoryMutation((nextState, catalog) => {
+                                                                equipInventoryStackAtIndex(
+                                                                  nextState,
+                                                                  view.index,
+                                                                  "twoHanded",
+                                                                  catalog,
+                                                                );
+                                                              })
+                                                            }
+                                                          >
+                                                            Equip two-handed
+                                                          </Button>
+                                                        ) : null}
+                                                      </>
+                                                    ) : null}
+                                                    {item.ref.kind === "shield" &&
+                                                    !item.containerId &&
+                                                    !item.equippedSlot ? (
+                                                      <>
+                                                        <Button
+                                                          type="button"
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() =>
+                                                            applyInventoryMutation((nextState, catalog) => {
+                                                              equipInventoryStackAtIndex(
+                                                                nextState,
+                                                                view.index,
+                                                                "mainHand",
+                                                                catalog,
+                                                              );
+                                                            })
+                                                          }
+                                                        >
+                                                          Equip main hand
+                                                        </Button>
+                                                        <Button
+                                                          type="button"
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() =>
+                                                            applyInventoryMutation((nextState, catalog) => {
+                                                              equipInventoryStackAtIndex(
+                                                                nextState,
+                                                                view.index,
+                                                                "offHand",
+                                                                catalog,
+                                                              );
+                                                            })
+                                                          }
+                                                        >
+                                                          Equip off hand
+                                                        </Button>
+                                                      </>
+                                                    ) : null}
+                                                    {item.ref.kind === "armor" &&
+                                                    !item.containerId &&
+                                                    !item.equippedSlot ? (
+                                                      <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          applyInventoryMutation((nextState, catalog) => {
+                                                            equipInventoryStackAtIndex(
+                                                              nextState,
+                                                              view.index,
+                                                              "armor",
+                                                              catalog,
+                                                            );
+                                                          })
                                                         }
-                                                        if (isSameRef(nextState.loadout.shieldRef, item.ref)) {
-                                                          nextState.loadout.shieldRef = undefined;
+                                                      >
+                                                        Equip armor
+                                                      </Button>
+                                                    ) : null}
+                                                    {item.equippedSlot ? (
+                                                      <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          applyInventoryMutation((nextState, catalog) => {
+                                                            stowEquippedInventoryStackAtIndex(
+                                                              nextState,
+                                                              view.index,
+                                                              catalog,
+                                                            );
+                                                          })
                                                         }
-                                                      })
-                                                    }
-                                                  >
-                                                    Remove item
-                                                  </Button>
-                                                </Field>
-                                              </CardContent>
-                                            </Card>
-                                          ))}
+                                                      >
+                                                        Stow equipped
+                                                      </Button>
+                                                    ) : null}
+                                                    {item.containerId ? (
+                                                      <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          applyInventoryMutation((nextState, catalog) => {
+                                                            removeInventoryStackFromContainerAtIndex(
+                                                              nextState,
+                                                              view.index,
+                                                              catalog,
+                                                            );
+                                                          })
+                                                        }
+                                                      >
+                                                        Remove from container
+                                                      </Button>
+                                                    ) : null}
+                                                  </div>
+                                                </CardContent>
+                                              </Card>
+                                            );
+                                          })}
                                         </div>
                                       ) : (
                                         <EmptyRegistryNotice
                                           title="Inventory empty"
-                                          detail="Pick owned inventory above to unlock quantity, charge, and container controls."
+                                          detail="Add inventory above to unlock stack actions, placement controls, and container moves."
                                         />
                                       )}
 
@@ -3103,42 +3565,48 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                                   label="Capacity"
                                                   value={container.capacity}
                                                   onChange={(value) =>
-                                                    mutateDraft((nextState) => {
+                                                    applyInventoryMutation((nextState, catalog) => {
                                                       const target = nextState.inventory.containers.find(
                                                         (entry) => entry.id === container.id,
                                                       );
                                                       if (target) {
                                                         target.capacity = value;
                                                       }
+                                                      syncInventoryPlacementState(nextState, catalog);
                                                     })
                                                   }
                                                 />
-                                                <NumberField
-                                                  id={`container-occupied-${container.id}`}
-                                                  label="Used"
-                                                  value={container.occupiedSlots}
-                                                  onChange={(value) =>
-                                                    mutateDraft((nextState) => {
-                                                      const target = nextState.inventory.containers.find(
-                                                        (entry) => entry.id === container.id,
-                                                      );
-                                                      if (target) {
-                                                        target.occupiedSlots = value;
-                                                      }
-                                                    })
-                                                  }
-                                                />
+                                                <Field>
+                                                  <FieldLabel>Used</FieldLabel>
+                                                  <Input
+                                                    value={`${container.occupiedSlots}`}
+                                                    readOnly
+                                                  />
+                                                  <FieldDescription>
+                                                    Derived from the stacks stored in this container.
+                                                  </FieldDescription>
+                                                </Field>
                                                 <Field>
                                                   <FieldLabel>Remove</FieldLabel>
                                                   <Button
                                                     variant="destructive"
                                                     size="sm"
                                                     onClick={() =>
-                                                      mutateDraft((nextState) => {
+                                                      applyInventoryMutation((nextState, catalog) => {
+                                                        nextState.inventory.items = nextState.inventory.items.map(
+                                                          (entry) =>
+                                                            entry.containerId === container.id
+                                                              ? {
+                                                                  ...entry,
+                                                                  containerId: undefined,
+                                                                }
+                                                              : { ...entry },
+                                                        );
                                                         nextState.inventory.containers =
                                                           nextState.inventory.containers.filter(
                                                             (entry) => entry.id !== container.id,
                                                           );
+                                                        syncInventoryPlacementState(nextState, catalog);
                                                       })
                                                     }
                                                   >
@@ -3168,7 +3636,7 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                 <MetricCard label="Status" value={status.toUpperCase()} />
                                 <MetricCard
                                   label="Validation"
-                                  value={preview?.validation.ok ? "OK" : "ATTENTION"}
+                                  value={isEditorValid ? "OK" : "ATTENTION"}
                                 />
                                 <MetricCard
                                   label="Dream Count"
@@ -3188,8 +3656,8 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                     </CardTitle>
                                   </CardHeader>
                                   <CardContent className="flex flex-col gap-3 py-1">
-                                    {validationIssues.length ? (
-                                      validationIssues.map((issue, index) => (
+                                    {allValidationIssues.length ? (
+                                      allValidationIssues.map((issue, index) => (
                                         <Card
                                           key={`${issue.path}-${index}`}
                                           size="sm"
@@ -3207,13 +3675,13 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                                       ))
                                     ) : (
                                       <p className="text-sm leading-7 text-muted-foreground">
-                                        No validation issues detected. The draft can be sealed as a completed character.
+                                        No validation issues detected. The draft can be finalized as a completed character.
                                       </p>
                                     )}
                                   </CardContent>
                                 </Card>
 
-                                <Card size="sm" className="border border-border/20 bg-card/55">
+                                <Card size="sm" className="border border-border/20 bg-card/55 ">
                                   <CardHeader className="gap-2">
                                     <CardTitle className="text-xs uppercase tracking-[0.28em] text-primary">
                                       Combat profile
@@ -3258,21 +3726,18 @@ export function CharacterEditor({ bugchudId }: { bugchudId?: string }) {
                     </AccordionItem>
                   ))}
                 </Accordion>
-              </CardContent>
-            </Card>
-          </div>
-
-          <SummaryPanel
-            className="hidden w-[24rem] shrink-0 xl:block"
-            draft={draft}
-            preview={preview}
-            options={editorOptions}
-            validationIssues={validationIssues}
-            saveState={saveState}
-            saveMessage={saveMessage}
-          />
+            </CardContent>
+          </Card>
         </div>
-      </main>
+
+        <SummaryPanel
+          className="hidden w-[24rem] shrink-0 xl:block"
+          draft={draft}
+          preview={preview}
+          options={editorOptions}
+          validationIssues={allValidationIssues}
+        />
+      </div>
     </div>
   );
 }

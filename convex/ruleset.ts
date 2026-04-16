@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
-import { bugchudCore, registryRefValidator } from "./bugchud";
+import {
+  bugchudCore,
+  getBackgroundsByOrigin,
+  registryRefValidator,
+} from "./bugchud";
 
 const catalogList = <TKind extends Parameters<typeof bugchudCore.catalog.listByKind>[0]>(
   kind: TKind,
@@ -29,6 +33,57 @@ export const getCharacterCreationOptions = query({
   },
 });
 
+export const getGuidedCharacterCreationOptions = query({
+  args: {},
+  handler: async () => {
+    const races = catalogList("race");
+    const origins = catalogList("origin");
+    const backgrounds = catalogList("background");
+    const dreams = catalogList("dream");
+    const mutations = catalogList("mutation");
+    const bionics = catalogList("bionic");
+    const spells = catalogList("spell");
+    const backgroundsByOrigin = getBackgroundsByOrigin();
+
+    const patronOptionRefs = bugchudCore.ruleset.characterCreation.faithOptions
+      .filter((refValue) => refValue.kind === "patron")
+      .map((refValue) => ({
+        kind: "patron" as const,
+        id: refValue.id,
+      }));
+
+    const items = catalogList("item");
+    const weapons = catalogList("weapon");
+    const armors = catalogList("armor");
+    const shields = catalogList("shield");
+    const startingBudget = bugchudCore.ruleset.characterCreation.startingBudget;
+    const defaultCurrency = bugchudCore.ruleset.inventoryAndAssets.economy.defaultCurrency;
+    const denominations = [...bugchudCore.ruleset.inventoryAndAssets.economy.denominations];
+
+    return {
+      rulesetId: bugchudCore.ruleset.id,
+      rulesetVersion: bugchudCore.ruleset.version,
+      generationNotes: [...(bugchudCore.ruleset.characterLore.generationNotes ?? [])],
+      races,
+      origins,
+      backgrounds,
+      backgroundsByOrigin,
+      dreams,
+      mutations,
+      bionics,
+      spells,
+      patrons: patronOptionRefs.map(resolveFaithOption),
+      items,
+      weapons,
+      armors,
+      shields,
+      startingBudget,
+      defaultCurrency,
+      denominations,
+    };
+  },
+});
+
 export const getCharacterEditorOptions = query({
   args: {},
   handler: async () => {
@@ -52,6 +107,7 @@ export const getCharacterEditorOptions = query({
     const boons = catalogList("boon");
     const covenants = catalogList("covenant");
     const relics = catalogList("relic");
+    const backgroundsByOrigin = getBackgroundsByOrigin();
 
     const faithOptionRefs = bugchudCore.ruleset.characterCreation.faithOptions
       .filter(
@@ -84,12 +140,7 @@ export const getCharacterEditorOptions = query({
         },
         background: {
           backgrounds,
-          backgroundsByOrigin: origins.map((origin) => ({
-            originId: origin.id,
-            backgroundIds: origin.availableBackgroundRefs.map((refValue) => refValue.id),
-            startingDreamIds: origin.startingDreamRefs?.map((refValue) => refValue.id) ?? [],
-            startingLanguages: [...(origin.startingLanguages ?? [])],
-          })),
+          backgroundsByOrigin,
         },
         path: {
           dreams,
