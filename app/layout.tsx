@@ -3,6 +3,7 @@ import { Epilogue, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import { SiteNavbar } from "@/components/site-navbar";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
@@ -50,7 +51,10 @@ export default function RootLayout({
     >
       <body className="font-sans antialiased">
         <ClerkProvider dynamic>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider>
+            <SiteNavbar />
+            {children}
+          </ConvexClientProvider>
         </ClerkProvider>
       </body>
     </html>

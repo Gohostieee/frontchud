@@ -4,12 +4,8 @@ import type { ElementType } from "react";
 import Link from "next/link";
 import {
   ArrowSquareOut,
-  BookOpen,
   Broadcast,
   ClockCounterClockwise,
-  GearSix,
-  Lightning,
-  List,
   Scroll,
   Skull,
   Sparkle,
@@ -18,51 +14,14 @@ import {
 } from "@phosphor-icons/react";
 import {
   SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
   useAuth,
 } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
-
-const topNavItems = ["Archive", "Rituals", "Conduits"] as const;
-
-const commandItems = [
-  {
-    label: "Characters",
-    hint: "Forge identity",
-    icon: UserCirclePlus,
-    isPrimary: true,
-  },
-  {
-    label: "NPCs",
-    hint: "Summon entities",
-    icon: Skull,
-  },
-  {
-    label: "Grimoire",
-    hint: "Decipher canon",
-    icon: BookOpen,
-  },
-  {
-    label: "Log",
-    hint: "Archive truth",
-    icon: ClockCounterClockwise,
-  },
-] as const;
 
 const fieldNotes = [
   {
@@ -110,7 +69,7 @@ export default function Home() {
 
   const moduleCards = [
     {
-      title: "Create Character",
+      title: "New Character",
       sequence: "Sequence 001 // Forge identity",
       summary: characterSummary,
       icon: UserCirclePlus,
@@ -152,16 +111,9 @@ export default function Home() {
     <div className="relative min-h-screen overflow-x-clip">
       <div className="grain-overlay pointer-events-none fixed inset-0 z-0" />
 
-      <Header isAuthenticated={isAuthenticated} />
-
-      <DesktopCommandRail
-        isAuthenticated={isAuthenticated}
-        rulesetVersion={rulesetVersion}
-      />
-
-      <main className="relative z-10 px-4 pb-28 pt-24 lg:ml-72 lg:px-10 lg:pt-28">
+      <main className="relative z-10 px-4 pb-28 pt-6 lg:px-10">
         <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-12">
-          <section className="relative flex min-h-[calc(100svh-13rem)] flex-col justify-center overflow-hidden border-l border-primary/20 pl-6 lg:pl-10">
+          <section className="relative flex min-h-[calc(100svh-11rem)] flex-col justify-center overflow-hidden border-l border-primary/20 pl-6 lg:pl-10">
             <div className="status-rune absolute left-[-6px] top-5 size-3 bg-primary" />
             <div className="absolute inset-y-12 right-0 hidden w-[28rem] bg-[radial-gradient(circle_at_center,_rgba(255,176,0,0.16),_transparent_65%)] blur-3xl lg:block" />
 
@@ -324,174 +276,6 @@ export default function Home() {
   );
 }
 
-function Header({ isAuthenticated }: { isAuthenticated: boolean }) {
-  return (
-    <header className="fixed inset-x-0 top-0 z-40 border-b border-border/20 bg-background/88 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-[110rem] items-center justify-between gap-4 px-4 lg:px-6">
-        <div className="flex items-center gap-3">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                aria-label="Open command rail"
-              >
-                <List data-icon="inline-start" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="w-[88vw] max-w-sm border-r border-border/30 bg-sidebar px-0 text-sidebar-foreground"
-            >
-              <SheetHeader className="border-b border-border/20 px-6 py-5">
-                <SheetTitle className="sr-only">Frontchud command rail</SheetTitle>
-                <div className="flex flex-col gap-1">
-                  <span className="font-display text-3xl font-black uppercase tracking-[0.18em] text-primary">
-                    Frontchud
-                  </span>
-                  <span className="font-mono text-[0.68rem] uppercase tracking-[0.34em] text-muted-foreground">
-                    Command_Hub // v0.9.4-beta
-                  </span>
-                </div>
-              </SheetHeader>
-              <div className="flex h-full flex-col">
-                <div className="flex flex-col gap-2 px-3 py-4">
-                  {commandItems.map((item) => (
-                    <CommandItem key={item.label} {...item} compact />
-                  ))}
-                </div>
-                <div className="mt-auto border-t border-border/20 px-4 py-4">
-                  <ManagerAccessButton
-                    isAuthenticated={isAuthenticated}
-                    fullWidth
-                    label="Access Manager"
-                  />
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          <div className="flex flex-col">
-            <span className="font-display text-3xl font-black uppercase tracking-[0.14em] text-primary">
-              Frontchud
-            </span>
-          </div>
-        </div>
-
-        <nav className="hidden items-center gap-8 lg:flex">
-          {topNavItems.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className="font-sans text-sm uppercase tracking-[0.28em] text-muted-foreground transition-colors hover:text-accent"
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden items-center gap-2 text-primary sm:flex">
-            <span className="flex size-9 items-center justify-center bg-card">
-              <GearSix className="size-5" weight="fill" />
-            </span>
-            <span className="flex size-9 items-center justify-center bg-card">
-              <TerminalWindow className="size-5" weight="fill" />
-            </span>
-          </div>
-
-          <SignedOut>
-            <SignInButton mode="modal">
-              <Button variant="outline" size="sm">
-                <ArrowSquareOut data-icon="inline-end" />
-                <span className="uppercase tracking-[0.3em]">Enter</span>
-              </Button>
-            </SignInButton>
-          </SignedOut>
-
-          <SignedIn>
-            <UserButton />
-          </SignedIn>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function DesktopCommandRail({
-  isAuthenticated,
-  rulesetVersion,
-}: {
-  isAuthenticated: boolean;
-  rulesetVersion: string;
-}) {
-  return (
-    <aside className="ritual-surface-strong fixed bottom-8 left-0 top-20 z-30 hidden w-72 flex-col border-r border-border/20 lg:flex">
-      <div className="border-b border-border/20 px-6 py-6">
-        <div className="flex flex-col gap-1">
-          <span className="font-mono text-[0.72rem] uppercase tracking-[0.34em] text-primary">
-            Command_Hub
-          </span>
-          <span className="font-mono text-[0.66rem] uppercase tracking-[0.28em] text-muted-foreground">
-            v0.9.4-beta // ruleset {rulesetVersion}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-2 px-3 py-4">
-        {commandItems.map((item) => (
-          <CommandItem key={item.label} {...item} />
-        ))}
-      </div>
-
-      <div className="border-t border-border/20 px-4 py-4">
-        <ManagerAccessButton
-          isAuthenticated={isAuthenticated}
-          fullWidth
-          label={isAuthenticated ? "Open Manager" : "Initiate Ritual"}
-        />
-      </div>
-    </aside>
-  );
-}
-
-function CommandItem({
-  icon: Icon,
-  label,
-  hint,
-  isPrimary = false,
-  compact = false,
-}: {
-  icon: ElementType;
-  label: string;
-  hint: string;
-  isPrimary?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-4 px-4 py-4 transition-colors",
-        compact ? "py-3" : "",
-        isPrimary
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-card hover:text-accent",
-      )}
-    >
-      <Icon className="size-5 shrink-0" weight={isPrimary ? "fill" : "regular"} />
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="truncate font-sans text-xs uppercase tracking-[0.3em]">
-          {label}
-        </span>
-        <span className="font-mono text-[0.58rem] uppercase tracking-[0.28em] opacity-70">
-          {hint}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
   if (isAuthenticated) {
     return (
@@ -499,7 +283,7 @@ function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
         <Button asChild size="lg">
           <Link href="/characters/new">
             <Sparkle data-icon="inline-end" />
-            <span className="uppercase tracking-[0.28em]">Initiate Character</span>
+            <span className="uppercase tracking-[0.28em]">New Character</span>
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg">
@@ -514,12 +298,12 @@ function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
 
   return (
     <div className="flex flex-wrap gap-3 pt-4">
-      <SignUpButton mode="modal">
-        <Button size="lg">
+      <Button asChild size="lg">
+        <Link href="/characters/new">
           <Sparkle data-icon="inline-end" />
-          <span className="uppercase tracking-[0.28em]">Initiate Character</span>
-        </Button>
-      </SignUpButton>
+          <span className="uppercase tracking-[0.28em]">New Character</span>
+        </Link>
+      </Button>
       <SignInButton mode="modal">
         <Button variant="outline" size="lg">
           <ArrowSquareOut data-icon="inline-end" />
@@ -527,41 +311,6 @@ function HeroActions({ isAuthenticated }: { isAuthenticated: boolean }) {
         </Button>
       </SignInButton>
     </div>
-  );
-}
-
-function ManagerAccessButton({
-  isAuthenticated,
-  fullWidth = false,
-  label,
-  detail,
-}: {
-  isAuthenticated: boolean;
-  fullWidth?: boolean;
-  label: string;
-  detail?: string;
-}) {
-  const className = cn(fullWidth && "w-full");
-
-  if (isAuthenticated) {
-    return (
-      <Button asChild className={className}>
-        <Link href="/server">
-          <Lightning data-icon="inline-end" />
-          <span className="uppercase tracking-[0.28em]">{label}</span>
-          {detail ? <span className="sr-only">{detail}</span> : null}
-        </Link>
-      </Button>
-    );
-  }
-
-  return (
-    <SignInButton mode="modal">
-      <Button className={className}>
-        <Lightning data-icon="inline-end" />
-        <span className="uppercase tracking-[0.28em]">{label}</span>
-      </Button>
-    </SignInButton>
   );
 }
 
