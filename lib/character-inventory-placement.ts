@@ -48,10 +48,12 @@ type LoadoutStateLike = {
   preparedVehicleWeaponRefs?: readonly InventoryOwnedRef[];
 };
 
-export type CharacterInventoryPlacementState = {
+export type InventoryPlacementStateLike = {
   inventory: InventoryStateLike;
   loadout: LoadoutStateLike;
 };
+
+export type CharacterInventoryPlacementState = InventoryPlacementStateLike;
 
 type ItemMeta = {
   itemKind: string;
@@ -532,7 +534,7 @@ export function buildInventoryStackKey(stack: InventoryStackLike, index: number)
 }
 
 export function syncInventoryPlacementState(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   catalog: InventoryPlacementCatalog,
 ) {
   const nextItems = applyLegacyCombatPlacements(state.inventory.items, state.loadout, catalog);
@@ -549,7 +551,7 @@ export function syncInventoryPlacementState(
 }
 
 export function appendInventoryStack(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   refValue: InventoryOwnedRef,
   catalog: InventoryPlacementCatalog,
 ) {
@@ -564,7 +566,7 @@ export function appendInventoryStack(
 }
 
 export function updateInventoryStackQuantity(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   quantity: number,
   catalog: InventoryPlacementCatalog,
@@ -586,7 +588,7 @@ export function updateInventoryStackQuantity(
 }
 
 export function updateInventoryStackCharges(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   charges: number | undefined,
   catalog: InventoryPlacementCatalog,
@@ -607,7 +609,7 @@ export function updateInventoryStackCharges(
 }
 
 export function removeInventoryStackAtIndex(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   catalog: InventoryPlacementCatalog,
 ) {
@@ -622,7 +624,7 @@ export function removeInventoryStackAtIndex(
 }
 
 export function equipInventoryStackAtIndex(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   slot: InventoryEquippedSlot,
   catalog: InventoryPlacementCatalog,
@@ -643,7 +645,7 @@ export function equipInventoryStackAtIndex(
 }
 
 export function stowEquippedInventoryStackAtIndex(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   catalog: InventoryPlacementCatalog,
 ) {
@@ -664,7 +666,7 @@ export function stowEquippedInventoryStackAtIndex(
 }
 
 export function moveInventoryStackToContainerAtIndex(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   containerId: string,
   catalog: InventoryPlacementCatalog,
@@ -700,7 +702,7 @@ export function moveInventoryStackToContainerAtIndex(
 }
 
 export function removeInventoryStackFromContainerAtIndex(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   index: number,
   catalog: InventoryPlacementCatalog,
 ) {
@@ -717,7 +719,7 @@ export function removeInventoryStackFromContainerAtIndex(
 }
 
 export function setLegacyNonCombatEquippedRefs(
-  state: CharacterInventoryPlacementState,
+  state: InventoryPlacementStateLike,
   refs: InventoryOwnedRef[],
   catalog: InventoryPlacementCatalog,
 ) {
