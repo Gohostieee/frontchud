@@ -737,13 +737,14 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
                         return;
                       }
                       mutateDraft((state) => {
-                        state.body = cloneState(templatePreview.normalizedState.body);
-                        state.inventory = cloneState(templatePreview.normalizedState.inventory);
-                        state.loadout = cloneState(templatePreview.normalizedState.loadout);
-                        state.magic = cloneState(templatePreview.normalizedState.magic);
-                        state.faith = cloneState(templatePreview.normalizedState.faith);
-                        state.resources = cloneState(templatePreview.normalizedState.resources);
-                        state.activeEffects = cloneState(templatePreview.normalizedState.activeEffects);
+                        const npcState = state as NpcState;
+                        npcState.body = cloneState(templatePreview.normalizedState.body);
+                        npcState.inventory = cloneState(templatePreview.normalizedState.inventory);
+                        npcState.loadout = cloneState(templatePreview.normalizedState.loadout);
+                        npcState.magic = cloneState(templatePreview.normalizedState.magic);
+                        npcState.faith = cloneState(templatePreview.normalizedState.faith);
+                        npcState.resources = cloneState(templatePreview.normalizedState.resources);
+                        npcState.activeEffects = cloneState(templatePreview.normalizedState.activeEffects);
                       });
                     }}
                     disabled={!templatePreview}

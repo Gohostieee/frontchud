@@ -35,7 +35,7 @@ type InventoryStateLike = {
   carrySlotsTotal: number;
   carrySlotsUsed: number;
   currency: Record<string, number>;
-  containers: InventoryContainerLike[];
+  containers: readonly InventoryContainerLike[];
   items: InventoryStackLike[];
 };
 
