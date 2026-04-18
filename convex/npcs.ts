@@ -661,24 +661,7 @@ export const createDraft = mutation({
 
     return persistNpc(ctx, ownerTokenIdentifier, state, {
       status: "draft",
-      currentStep: "identity",
-    });
-  },
-});
-
-export const createGuidedDraft = mutation({
-  args: {
-    input: npcWorkflowInputValidator,
-  },
-  handler: async (ctx, args) => {
-    const ownerTokenIdentifier = await requireViewerTokenIdentifier(ctx);
-    const input = structuredClone(args.input) as NpcWorkflowInput;
-    assertNpcWorkflowRefs(input);
-    const state = buildNpcStateFromInput(input);
-
-    return persistNpc(ctx, ownerTokenIdentifier, state, {
-      status: "draft",
-      currentStep: "review",
+      currentStep: "template",
     });
   },
 });

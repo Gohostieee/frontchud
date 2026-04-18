@@ -114,22 +114,6 @@ function formatTimestamp(timestamp: number | null) {
   }).format(timestamp);
 }
 
-function formatWorkflowStep(step: string) {
-  if (step === "identity" || step === "template") {
-    return "Setup";
-  }
-  if (step === "body" || step === "doctrine") {
-    return "Capabilities";
-  }
-  if (step === "gear") {
-    return "Gear";
-  }
-  if (step === "review") {
-    return "Review";
-  }
-  return step;
-}
-
 function normalizeCategoryId(npc: ManagerNpc, categories: ManagerCategory[]) {
   if (!npc.managerCategoryId) {
     return null;
@@ -287,12 +271,10 @@ function NpcListRow({
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant={npc.status === "complete" ? "default" : "outline"}>
-                  {npc.status}
+                  {npc.status === "complete" ? "Complete" : "Editing"}
                 </Badge>
-                <Badge variant="ghost">{formatWorkflowStep(npc.currentStep)}</Badge>
                 <Badge variant="ghost">{npc.actorKind}</Badge>
                 <Badge variant="ghost">{npc.creatureName}</Badge>
-                {npc.npcLoadoutName ? <Badge variant="ghost">{npc.npcLoadoutName}</Badge> : null}
                 {npc.allegiance ? <Badge variant="ghost">{npc.allegiance}</Badge> : null}
               </div>
               <div className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
@@ -368,7 +350,7 @@ function ManagerPlaceholder() {
           No entities yet
         </CardTitle>
         <CardDescription className="max-w-xl text-sm leading-7 text-muted-foreground">
-          Open the guided creator to forge a creature, mount, or NPC draft, then manage the roster from here.
+          Start from a template, open the editor, and manage the roster from here.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3 py-5">
@@ -841,7 +823,8 @@ export function NpcManager() {
                   NPCs
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                  Organize the full creature-side roster, move entities between sections, and open any draft in the advanced editor.
+                  Organize the full creature-side roster, move entities between sections, and open
+                  any draft in the editor.
                 </p>
               </div>
             </div>

@@ -42,25 +42,22 @@ async function createNpc(
   });
 }
 
-test("npc ruleset queries expose guided and editor payloads", async () => {
+test("npc ruleset queries expose creation and editor payloads", async () => {
   const t = convexTest(schema, modules);
 
   const creationOptions = await t.query(api.ruleset.getNpcCreationOptions, {});
-  const guidedOptions = await t.query(api.ruleset.getGuidedNpcCreationOptions, {});
   const editorOptions = await t.query(api.ruleset.getNpcEditorOptions, {});
 
   expect(creationOptions.creatures.length).toBeGreaterThan(0);
   expect(creationOptions.npcLoadouts.length).toBeGreaterThan(0);
-  expect(guidedOptions.creatures.length).toBeGreaterThan(0);
-  expect(guidedOptions.items).toBeDefined();
-  expect(guidedOptions.denominations.length).toBeGreaterThan(0);
   expect(editorOptions.templates.creatures.length).toBeGreaterThan(0);
+  expect(editorOptions.templates).not.toHaveProperty("npcLoadouts");
   expect(editorOptions.body.mutations).toBeDefined();
   expect(editorOptions.doctrine.spells).toBeDefined();
   expect(editorOptions.gear.items).toBeDefined();
 });
 
-test("guided npc preview is public and createGuidedDraft lands on review", async () => {
+test("npc template preview is public and createDraft starts in template mode", async () => {
   const t = convexTest(schema, modules);
   const owner = t.withIdentity(createIdentity("gm|owner"));
 
@@ -72,10 +69,6 @@ test("guided npc preview is public and createGuidedDraft lands on review", async
       kind: "creature" as const,
       id: firstCreature!.id as string,
     },
-    npcLoadoutRef: {
-      kind: "npcLoadout" as const,
-      id: firstNpcLoadout!.id as string,
-    },
   };
 
   const preview = await t.query(api.npcs.previewInitialization, {
@@ -86,12 +79,12 @@ test("guided npc preview is public and createGuidedDraft lands on review", async
   expect(preview.normalizedState.actorKind).toBe("npc");
   expect(preview.validation.ok).toBe(true);
 
-  const created = await owner.mutation(api.npcs.createGuidedDraft, {
+  const created = await owner.mutation(api.npcs.createDraft, {
     input: previewInput,
   });
 
   expect(created?.status).toBe("draft");
-  expect(created?.currentStep).toBe("review");
+  expect(created?.currentStep).toBe("template");
 });
 
 test("npc draft lifecycle normalizes preview, saves, completes, and resumes", async () => {
@@ -110,7 +103,7 @@ test("npc draft lifecycle normalizes preview, saves, completes, and resumes", as
   });
 
   expect(created?.status).toBe("draft");
-  expect(created?.currentStep).toBe("identity");
+  expect(created?.currentStep).toBe("template");
 
   const staleState = structuredClone(created!.state);
   staleState.identity.name = "Ash Mount Prime";
@@ -125,14 +118,14 @@ test("npc draft lifecycle normalizes preview, saves, completes, and resumes", as
   const saved = await owner.mutation(api.npcs.saveDraft, {
     bugchudId: created!.bugchudId,
     state: staleState,
-    currentStep: "body",
+    currentStep: "template",
   });
-  expect(saved?.currentStep).toBe("body");
+  expect(saved?.currentStep).toBe("template");
 
   const resumed = await owner.query(api.npcs.getMine, {
     bugchudId: created!.bugchudId,
   });
-  expect(resumed?.currentStep).toBe("body");
+  expect(resumed?.currentStep).toBe("template");
 
   const completed = await owner.mutation(api.npcs.completeDraft, {
     bugchudId: created!.bugchudId,

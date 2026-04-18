@@ -22,21 +22,22 @@ export default async function NpcEditorPage({
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">NPC workspace</Badge>
-                <Badge variant="ghost">Advanced editor</Badge>
+                <Badge variant="ghost">Single editor</Badge>
               </div>
               <div>
                 <h1 className="font-display text-4xl font-black tracking-[-0.06em] text-primary sm:text-5xl">
                   NPC Editor
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                  Guided creation happens on the new route. This workspace is the full editor for refining, validating, and finalizing the persisted draft.
+                  This workspace is the single editing surface for refining, validating, and
+                  finalizing the persisted draft.
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button asChild variant="outline">
-                <Link href="/npcs/new">New guided draft</Link>
+                <Link href="/npcs/new">New entity</Link>
               </Button>
               <Button asChild>
                 <Link href="/npcs">Open manager</Link>

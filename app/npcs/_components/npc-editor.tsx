@@ -41,6 +41,7 @@ import type {
   RegistryRef,
 } from "@bugchud/core/foundation";
 import type { ValidationIssue } from "@bugchud/core/validation";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   appendInventoryStack,
@@ -83,13 +85,7 @@ import {
   type SearchOption,
 } from "../../characters/_components/character-editor-controls";
 
-const VISIBLE_STEPS = ["setup", "capabilities", "gear", "review"] as const;
-const VISIBLE_STEP_LABELS: Record<VisibleStep, string> = {
-  setup: "Setup",
-  capabilities: "Capabilities",
-  gear: "Gear",
-  review: "Review",
-};
+const NPC_EDITOR_STEP = "template" as const;
 const RESOURCE_KEYS = [
   "focus",
   "xom",
@@ -104,9 +100,36 @@ const RESOURCE_KEYS = [
   "durability",
   "shieldIntegrity",
 ] as const;
+const ATTRIBUTE_KEYS = ["twitch", "flesh", "mojo", "glory"] as const;
+const DERIVED_STAT_KEYS = ["sprint", "skill", "bones", "manaDiceMax", "focus"] as const;
+const RESOURCE_LABELS: Record<(typeof RESOURCE_KEYS)[number], string> = {
+  focus: "Focus",
+  xom: "XOM",
+  ammo: "Ammo",
+  currency: "Currency Pool",
+  health: "Health",
+  manaDice: "Mana Dice",
+  fate: "Fate",
+  fuel: "Fuel",
+  morale: "Morale",
+  supplies: "Supplies",
+  durability: "Durability",
+  shieldIntegrity: "Shield Integrity",
+};
+const ATTRIBUTE_LABELS: Record<(typeof ATTRIBUTE_KEYS)[number], string> = {
+  twitch: "Twitch",
+  flesh: "Flesh",
+  mojo: "Mojo",
+  glory: "Glory",
+};
+const DERIVED_STAT_LABELS: Record<(typeof DERIVED_STAT_KEYS)[number], string> = {
+  sprint: "Sprint",
+  skill: "Skill",
+  bones: "Bones",
+  manaDiceMax: "Mana Dice Max",
+  focus: "Derived Focus",
+};
 
-type WizardStep = "identity" | "template" | "body" | "doctrine" | "gear" | "review";
-type VisibleStep = (typeof VISIBLE_STEPS)[number];
 type SaveState = "idle" | "saving" | "saved" | "error";
 type NpcDoc = Doc<"npcs">;
 type AnyRegistryRef = { kind: string | number | boolean | bigint; id: string };
@@ -123,7 +146,6 @@ type EditorOptions = {
   rulesetVersion: string;
   templates: {
     creatures: CreatureDefinition[];
-    npcLoadouts: Array<{ id: string; name: string; summary: string }>;
   };
   body: {
     mutations: MutationDefinition[];
@@ -194,37 +216,19 @@ function inventoryLabelFromRef(options: EditorOptions, refValue: AnyRegistryRef)
   );
 }
 
-function toVisibleStep(step: WizardStep): VisibleStep {
-  if (step === "identity" || step === "template") {
-    return "setup";
-  }
-  if (step === "body" || step === "doctrine") {
-    return "capabilities";
-  }
-  return step;
-}
-
-function toStoredStep(step: VisibleStep, currentStep: WizardStep): WizardStep {
-  if (step === "setup") {
-    return currentStep === "identity" || currentStep === "template" ? currentStep : "template";
-  }
-  if (step === "capabilities") {
-    return currentStep === "body" || currentStep === "doctrine" ? currentStep : "body";
-  }
-  return step;
-}
-
-function visibleStepLabel(step: VisibleStep) {
-  return VISIBLE_STEP_LABELS[step];
-}
-
 function getSaveTone(saveState: SaveState) {
   if (saveState === "saved") return "default";
   if (saveState === "error") return "destructive";
   return "outline";
 }
 
-function SaveStatusBadge({ saveState, saveMessage }: { saveState: SaveState; saveMessage: string }) {
+function SaveStatusBadge({
+  saveState,
+  saveMessage,
+}: {
+  saveState: SaveState;
+  saveMessage: string;
+}) {
   const Icon =
     saveState === "saving"
       ? FloppyDiskIcon
@@ -271,6 +275,81 @@ function LoadingState({
   );
 }
 
+function EditorSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="ritual-surface border border-border/20 bg-background/68">
+      <CardHeader className="gap-3 border-b border-border/20 pb-5">
+        <CardTitle className="font-display text-3xl font-black tracking-[-0.05em] text-primary">
+          {title}
+        </CardTitle>
+        <CardDescription className="max-w-3xl text-sm leading-7 text-muted-foreground">
+          {description}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="py-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-border/20 bg-background/55 px-4 py-3">
+      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-2 text-sm uppercase tracking-[0.14em] text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function ResourceEditorRow({
+  label,
+  currentValue,
+  maxValue,
+  onCurrentChange,
+  onMaxChange,
+}: {
+  label: string;
+  currentValue: number;
+  maxValue: number;
+  onCurrentChange: (value: string) => void;
+  onMaxChange: (value: string) => void;
+}) {
+  return (
+    <Card size="sm" className="border border-border/20 bg-background/50">
+      <CardContent className="grid gap-4 py-4 md:grid-cols-[14rem_1fr_1fr] md:items-end">
+        <div className="text-sm uppercase tracking-[0.18em] text-primary">{label}</div>
+        <Field>
+          <FieldLabel htmlFor={`${label}-current`}>Current</FieldLabel>
+          <Input
+            id={`${label}-current`}
+            type="number"
+            value={currentValue}
+            onChange={(event) => onCurrentChange(event.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor={`${label}-max`}>Max</FieldLabel>
+          <Input
+            id={`${label}-max`}
+            type="number"
+            value={maxValue}
+            onChange={(event) => onMaxChange(event.target.value)}
+          />
+        </Field>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function NpcEditor({ bugchudId }: { bugchudId: string }) {
   const { isLoaded, isSignedIn } = useAuth();
   const npc = useQuery(api.npcs.getMine, isSignedIn ? { bugchudId } : "skip") as
@@ -285,11 +364,15 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
   const deferredNpc = useDeferredValue(npc);
 
   const [draftState, setDraftState] = useState<NpcState | null>(null);
-  const [currentStepState, setCurrentStepState] = useState<WizardStep | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("Synced");
   const [surfaceError, setSurfaceError] = useState<string | null>(null);
   const [inventorySelection, setInventorySelection] = useState<string | undefined>(undefined);
+  const [activeConditionsText, setActiveConditionsText] = useState("[]");
+  const [activeConditionsError, setActiveConditionsError] = useState<string | null>(null);
+  const [activeEffectsText, setActiveEffectsText] = useState("[]");
+  const [activeEffectsError, setActiveEffectsError] = useState<string | null>(null);
+
   const draft = useMemo(
     () =>
       editorOptions
@@ -304,8 +387,7 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
         : draftState ?? (deferredNpc ? cloneState(deferredNpc.state) : null),
     [deferredNpc, draftState, editorOptions],
   );
-  const currentStep = currentStepState ?? ((deferredNpc?.currentStep as WizardStep) ?? "identity");
-  const visibleCurrentStep = toVisibleStep(currentStep);
+
   const visibleDenominations = useMemo(
     () =>
       editorOptions
@@ -316,13 +398,11 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
         : [],
     [editorOptions],
   );
+
   const normalizedDraft = useMemo(
     () =>
       draft
-        ? normalizeNpcCurrencyState(
-            draft,
-            editorOptions?.gear.defaultCurrency ?? "zennies",
-          )
+        ? normalizeNpcCurrencyState(draft, editorOptions?.gear.defaultCurrency ?? "zennies")
         : null,
     [draft, editorOptions],
   );
@@ -341,7 +421,6 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
             actorKind: normalizedDraft.actorKind,
             allegiance: normalizedDraft.identity.allegiance,
             creatureRef: normalizedDraft.identity.creatureRef,
-            npcLoadoutRef: normalizedDraft.identity.npcLoadoutRef,
             tags: normalizedDraft.tags ?? [],
           },
         } as never)
@@ -364,10 +443,23 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
     });
   }, [editorOptions]);
 
-  const serializedDraft = useMemo(
-    () => (draft ? JSON.stringify({ draft, currentStep }) : null),
-    [currentStep, draft],
+  const serializedDraft = useMemo(() => (draft ? JSON.stringify(draft) : null), [draft]);
+  const serializedActiveConditions = useMemo(
+    () => JSON.stringify(draft?.body.activeConditions ?? [], null, 2),
+    [draft?.body.activeConditions],
   );
+  const serializedActiveEffects = useMemo(
+    () => JSON.stringify(draft?.activeEffects ?? [], null, 2),
+    [draft?.activeEffects],
+  );
+
+  useEffect(() => {
+    setActiveConditionsText(serializedActiveConditions);
+  }, [serializedActiveConditions]);
+
+  useEffect(() => {
+    setActiveEffectsText(serializedActiveEffects);
+  }, [serializedActiveEffects]);
 
   useEffect(() => {
     if (!draftState || !npc || !serializedDraft) {
@@ -384,7 +476,7 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
             draftState,
             editorOptions?.gear.defaultCurrency ?? "zennies",
           ),
-          currentStep,
+          currentStep: NPC_EDITOR_STEP,
         } as never);
         setSaveState("saved");
         setSaveMessage("Saved");
@@ -396,15 +488,7 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
     }, 800);
 
     return () => window.clearTimeout(timeout);
-  }, [
-    bugchudId,
-    currentStep,
-    draftState,
-    editorOptions?.gear.defaultCurrency,
-    npc,
-    saveDraft,
-    serializedDraft,
-  ]);
+  }, [bugchudId, draftState, editorOptions?.gear.defaultCurrency, npc, saveDraft, serializedDraft]);
 
   function mutateDraft(mutator: (state: NpcState & InventoryPlacementStateLike) => void) {
     startTransition(() => {
@@ -439,16 +523,10 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
 
   const creatureOptions = useMemo(
     () =>
-      (editorOptions?.templates.creatures ?? []).map((entry) =>
-        toSearchOption(entry.id, entry.name, entry.summary, "CREATURE"),
-      ),
-    [editorOptions],
-  );
-  const loadoutOptions = useMemo(
-    () =>
-      (editorOptions?.templates.npcLoadouts ?? []).map((entry) =>
-        toSearchOption(entry.id, entry.name, entry.summary),
-      ),
+      (editorOptions?.templates.creatures ?? [])
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((entry) => toSearchOption(entry.id, entry.name, entry.summary, "CREATURE")),
     [editorOptions],
   );
   const mutationOptions = useMemo(
@@ -596,7 +674,9 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
     <div className="flex min-w-0 flex-col gap-6 pb-10">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline">NPC editor</Badge>
-        <Badge variant={npc.status === "complete" ? "default" : "outline"}>{npc.status}</Badge>
+        <Badge variant={npc.status === "complete" ? "default" : "outline"}>
+          {npc.status === "complete" ? "Complete" : "Editing"}
+        </Badge>
         <SaveStatusBadge saveState={saveState} saveMessage={saveMessage} />
       </div>
 
@@ -613,601 +693,654 @@ export function NpcEditor({ bugchudId }: { bugchudId: string }) {
         </Card>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {VISIBLE_STEPS.map((step) => (
+      <EditorSection
+        title="Identity"
+        description="Set the display-facing basics first. These fields stay intact when you reapply the template."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <CompactTextField
+            id="npc-name"
+            label="Display name"
+            value={draft.identity.name}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                state.identity.name = value;
+              })
+            }
+          />
+          <CompactTextField
+            id="npc-allegiance"
+            label="Allegiance"
+            value={draft.identity.allegiance ?? ""}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                state.identity.allegiance = value || undefined;
+              })
+            }
+          />
+          <CompactTextField
+            id="npc-tags"
+            label="Tags"
+            value={(draft.tags ?? []).join(", ")}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                state.tags = value
+                  .split(",")
+                  .map((entry) => entry.trim())
+                  .filter(Boolean);
+              })
+            }
+            description="Comma-separated labels for search and grouping."
+          />
+          <Field>
+            <FieldLabel>Actor kind</FieldLabel>
+            <div className="flex flex-wrap gap-2">
+              {(["npc", "creature", "mount"] as const).map((kind) => (
+                <Button
+                  key={kind}
+                  variant={draft.actorKind === kind ? "default" : "outline"}
+                  size="xs"
+                  onClick={() =>
+                    mutateDraft((state) => {
+                      state.actorKind = kind;
+                    })
+                  }
+                >
+                  {kind}
+                </Button>
+              ))}
+            </div>
+            <FieldDescription>Use this to distinguish NPCs, creatures, and mounts.</FieldDescription>
+          </Field>
+        </div>
+      </EditorSection>
+
+      <EditorSection
+        title="Template"
+        description="Choose the creature template here. Reapplying it rebuilds generated slices without overwriting identity fields."
+      >
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <SearchableSingleSelect
+            label="Template"
+            options={creatureOptions}
+            value={draft.identity.creatureRef.id}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                if (value) {
+                  state.identity.creatureRef = registryRef("creature", value);
+                }
+              })
+            }
+          />
           <Button
-            key={step}
-            variant={visibleCurrentStep === step ? "default" : "outline"}
-            size="xs"
-            onClick={() => setCurrentStepState(toStoredStep(step, currentStep))}
+            variant="outline"
+            onClick={() => {
+              if (!templatePreview) {
+                return;
+              }
+              mutateDraft((state) => {
+                state.body = cloneState(templatePreview.normalizedState.body);
+                state.inventory = cloneState(templatePreview.normalizedState.inventory) as never;
+                state.loadout = cloneState(templatePreview.normalizedState.loadout) as never;
+                state.magic = cloneState(templatePreview.normalizedState.magic);
+                state.faith = cloneState(templatePreview.normalizedState.faith);
+                state.resources = cloneState(templatePreview.normalizedState.resources);
+                state.activeEffects = cloneState(templatePreview.normalizedState.activeEffects);
+              });
+            }}
+            disabled={!templatePreview}
           >
-            {visibleStepLabel(step)}
+            Apply Template
           </Button>
-        ))}
-      </div>
+        </div>
+        <div className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          {templatePreview ? "Template preview ready." : "Preparing template preview."}
+        </div>
+      </EditorSection>
 
-      <Card className="ritual-surface border border-border/20 bg-background/68">
-        <CardHeader className="gap-4 border-b border-border/20 pb-5">
-          <CardTitle className="font-display text-4xl font-black tracking-[-0.06em] text-primary">
-            {visibleStepLabel(visibleCurrentStep)}
-          </CardTitle>
-          <CardDescription className="max-w-3xl text-sm leading-7 text-muted-foreground">
-            Refine setup, optional prefills, capabilities, gear, and validation state while the workspace autosaves in the background.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6 py-6">
-          {visibleCurrentStep === "setup" ? (
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <CompactTextField
-                  id="npc-name"
-                  label="Display name"
-                  value={draft.identity.name}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.identity.name = value;
-                    })
-                  }
-                />
-                <CompactTextField
-                  id="npc-allegiance"
-                  label="Allegiance"
-                  value={draft.identity.allegiance ?? ""}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.identity.allegiance = value || undefined;
-                    })
-                  }
-                />
-                <CompactTextField
-                  id="npc-tags"
-                  label="Tags"
-                  value={(draft.tags ?? []).join(", ")}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.tags = value
-                        .split(",")
-                        .map((entry) => entry.trim())
-                        .filter(Boolean);
-                    })
-                  }
-                />
-                <div className="space-y-3">
-                  <div className="text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
-                    Actor kind
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["npc", "creature", "mount"] as const).map((kind) => (
-                      <Button
-                        key={kind}
-                        variant={draft.actorKind === kind ? "default" : "outline"}
-                        size="xs"
-                        onClick={() =>
-                          mutateDraft((state) => {
-                            state.actorKind = kind;
-                          })
-                        }
-                      >
-                        {kind}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+      <EditorSection
+        title="Stats"
+        description="Directly tune the core attribute and derived-stat values the draft is carrying right now."
+      >
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
+            {ATTRIBUTE_KEYS.map((key) => (
+              <CompactTextField
+                key={key}
+                id={`attr-${key}`}
+                label={ATTRIBUTE_LABELS[key]}
+                type="number"
+                value={String(draft.attributes[key])}
+                onChange={(value) =>
+                  mutateDraft((state) => {
+                    state.attributes[key] = Number(value || 0);
+                  })
+                }
+              />
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {DERIVED_STAT_KEYS.map((key) => (
+              <CompactTextField
+                key={key}
+                id={`derived-${key}`}
+                label={DERIVED_STAT_LABELS[key]}
+                type="number"
+                value={String(draft.derivedStats[key])}
+                onChange={(value) =>
+                  mutateDraft((state) => {
+                    state.derivedStats[key] = Number(value || 0);
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      </EditorSection>
 
-              <div className="border border-border/20 bg-background/55 px-4 py-4">
-                <div className="text-[0.68rem] uppercase tracking-[0.22em] text-muted-foreground">
-                  Authored prefills
-                </div>
-                <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                  Creature templates are required. NPC loadouts are optional. Applying a prefill rebuilds generated capability, faith, and gear slices without overwriting identity fields.
-                </p>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <SearchableSingleSelect
-                    label="Creature template"
-                    options={creatureOptions}
-                    value={draft.identity.creatureRef.id}
-                    onChange={(value) =>
-                      mutateDraft((state) => {
-                        if (value) {
-                          state.identity.creatureRef = registryRef("creature", value);
-                        }
-                      })
-                    }
-                  />
-                  <SearchableSingleSelect
-                    label="NPC loadout"
-                    options={loadoutOptions}
-                    value={draft.identity.npcLoadoutRef?.id}
-                    onChange={(value) =>
-                      mutateDraft((state) => {
-                        state.identity.npcLoadoutRef = value
-                          ? registryRef("npcLoadout", value)
-                          : undefined;
-                      })
-                    }
-                    description="Optional authored loadout to layer onto the creature template."
-                  />
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!templatePreview) {
-                        return;
-                      }
-                      mutateDraft((state) => {
-                        const npcState = state as NpcState;
-                        npcState.body = cloneState(templatePreview.normalizedState.body);
-                        npcState.inventory = cloneState(templatePreview.normalizedState.inventory);
-                        npcState.loadout = cloneState(templatePreview.normalizedState.loadout);
-                        npcState.magic = cloneState(templatePreview.normalizedState.magic);
-                        npcState.faith = cloneState(templatePreview.normalizedState.faith);
-                        npcState.resources = cloneState(templatePreview.normalizedState.resources);
-                        npcState.activeEffects = cloneState(templatePreview.normalizedState.activeEffects);
-                      });
-                    }}
-                    disabled={!templatePreview}
-                  >
-                    Apply prefill
-                  </Button>
-                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    {templatePreview ? "Prefill preview ready." : "Staging prefill preview."}
-                  </div>
-                </div>
-              </div>
+      <EditorSection
+        title="Resources"
+        description="Every resource is labeled explicitly so current and max values are easy to read at a glance."
+      >
+        <div className="grid gap-3">
+          {RESOURCE_KEYS.map((key) => (
+            <ResourceEditorRow
+              key={key}
+              label={RESOURCE_LABELS[key]}
+              currentValue={draft.resources[key]?.current ?? 0}
+              maxValue={draft.resources[key]?.maximum ?? 0}
+              onCurrentChange={(value) =>
+                mutateDraft((state) => {
+                  state.resources[key] = {
+                    current: Number(value || 0),
+                    maximum: state.resources[key]?.maximum ?? 0,
+                  };
+                })
+              }
+              onMaxChange={(value) =>
+                mutateDraft((state) => {
+                  state.resources[key] = {
+                    current: state.resources[key]?.current ?? 0,
+                    maximum: Number(value || 0),
+                  };
+                })
+              }
+            />
+          ))}
+        </div>
+      </EditorSection>
+
+      <EditorSection
+        title="Mutations And Bionics"
+        description="Adjust physical alterations and body-level changes without leaving the main editor."
+      >
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SearchableMultiSelect
+            label="Mutations"
+            options={mutationOptions}
+            values={draft.body.mutationRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.body.mutationRefs = registryRefs("mutation", values);
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Bionics"
+            options={bionicOptions}
+            values={draft.body.bionicRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.body.bionicRefs = registryRefs("bionic", values);
+              })
+            }
+          />
+        </div>
+      </EditorSection>
+
+      <EditorSection
+        title="Magic And Faith"
+        description="Tune doctrine, spell access, and faith options in one place instead of separate steps."
+      >
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SearchableMultiSelect
+            label="Grimoires"
+            options={grimoireOptions}
+            values={draft.magic.grimoireRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.magic.grimoireRefs = registryRefs("grimoire", values);
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Known spells"
+            options={spellOptions}
+            values={draft.magic.knownSpellRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.magic.knownSpellRefs = registryRefs("spell", values);
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Prepared spells"
+            options={spellOptions}
+            values={draft.magic.preparedSpellRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.magic.preparedSpellRefs = registryRefs("spell", values);
+              })
+            }
+          />
+          <SearchableSingleSelect
+            label="Pantheon"
+            options={pantheonOptions}
+            value={draft.faith.pantheonRef?.id}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                state.faith.pantheonRef = value ? registryRef("pantheon", value) : undefined;
+              })
+            }
+          />
+          <SearchableSingleSelect
+            label="Patron"
+            options={patronOptions}
+            value={draft.faith.patronRef?.id}
+            onChange={(value) =>
+              mutateDraft((state) => {
+                state.faith.patronRef = value ? registryRef("patron", value) : undefined;
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Boons"
+            options={boonOptions}
+            values={draft.faith.boonRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.faith.boonRefs = registryRefs("boon", values);
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Covenants"
+            options={covenantOptions}
+            values={draft.faith.covenantRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.faith.covenantRefs = registryRefs("covenant", values);
+              })
+            }
+          />
+          <SearchableMultiSelect
+            label="Relics"
+            options={relicOptions}
+            values={draft.faith.relicRefs.map((entry) => entry.id)}
+            onChange={(values) =>
+              mutateDraft((state) => {
+                state.faith.relicRefs = registryRefs("relic", values);
+              })
+            }
+          />
+        </div>
+      </EditorSection>
+
+      <EditorSection
+        title="Inventory And Currency"
+        description="Manage money, carried items, equipment, and containers without splitting gear into a separate workflow."
+      >
+        <div className="flex flex-col gap-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            {visibleDenominations.map((denomination) => (
+              <CompactTextField
+                key={denomination}
+                id={`currency-${denomination}`}
+                label={getCurrencyFieldLabel(denomination)}
+                type="number"
+                value={String(readCurrencyAmount(draft.inventory.currency, denomination))}
+                onChange={(value) =>
+                  mutateDraft((state) => {
+                    state.inventory.currency = writeCurrencyAmount(
+                      state.inventory.currency,
+                      denomination,
+                      Number(value || 0),
+                      editorOptions.gear.defaultCurrency,
+                    );
+                  })
+                }
+              />
+            ))}
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <SearchableSingleSelect
+              label="Add inventory stack"
+              options={inventoryCatalogOptions}
+              value={inventorySelection}
+              onChange={setInventorySelection}
+              placeholder="Search inventory definitions"
+            />
+            <div className="flex flex-wrap gap-2 self-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={!inventorySelection}
+                onClick={() => {
+                  if (!inventorySelection) {
+                    return;
+                  }
+                  const [kind, id] = inventorySelection.split(":");
+                  applyInventoryMutation((state, catalog) => {
+                    appendInventoryStack(state, { kind, id } as InventoryOwnedRef, catalog);
+                  });
+                  setInventorySelection(undefined);
+                }}
+              >
+                Add item
+              </Button>
+              {editorOptions.gear.containerDefinitions.slice(0, 3).map((definition) => (
+                <Button
+                  key={definition.label}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    mutateDraft((state) => {
+                      state.inventory.containers = [
+                        ...state.inventory.containers,
+                        {
+                          id: crypto.randomUUID(),
+                          label: definition.label,
+                          capacity: definition.capacity,
+                          occupiedSlots: 0,
+                        },
+                      ];
+                    })
+                  }
+                >
+                  + {definition.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {draft.inventory.containers.length ? (
+            <div className="flex flex-wrap gap-2">
+              {draft.inventory.containers.map((container) => (
+                <Badge key={container.id} variant="outline">
+                  {container.label} {container.occupiedSlots}/{container.capacity}
+                </Badge>
+              ))}
             </div>
           ) : null}
 
-          {visibleCurrentStep === "capabilities" ? (
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-4 xl:grid-cols-2">
-                <SearchableMultiSelect
-                  label="Mutations"
-                  options={mutationOptions}
-                  values={draft.body.mutationRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.body.mutationRefs = registryRefs("mutation", values);
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Bionics"
-                  options={bionicOptions}
-                  values={draft.body.bionicRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.body.bionicRefs = registryRefs("bionic", values);
-                    })
-                  }
-                />
-                <div className="grid gap-3 md:grid-cols-2 xl:col-span-2">
-                  {(["twitch", "flesh", "mojo", "glory"] as const).map((key) => (
-                    <CompactTextField
-                      key={key}
-                      id={`attr-${key}`}
-                      label={key}
-                      type="number"
-                      value={String(draft.attributes[key])}
-                      onChange={(value) =>
-                        mutateDraft((state) => {
-                          state.attributes[key] = Number(value || 0);
-                        })
-                      }
-                    />
-                  ))}
-                  {(["sprint", "skill", "bones", "manaDiceMax", "focus"] as const).map((key) => (
-                    <CompactTextField
-                      key={key}
-                      id={`derived-${key}`}
-                      label={key}
-                      type="number"
-                      value={String(draft.derivedStats[key])}
-                      onChange={(value) =>
-                        mutateDraft((state) => {
-                          state.derivedStats[key] = Number(value || 0);
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-                <CompactTextareaField
-                  id="active-conditions"
-                  label="Active conditions JSON"
-                  value={JSON.stringify(draft.body.activeConditions, null, 2)}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.body.activeConditions = JSON.parse(value);
-                    })
-                  }
-                />
-                <CompactTextareaField
-                  id="active-effects"
-                  label="Active effects JSON"
-                  value={JSON.stringify(draft.activeEffects, null, 2)}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.activeEffects = JSON.parse(value);
-                    })
-                  }
-                />
-                <div className="grid gap-3 md:grid-cols-2 xl:col-span-2">
-                  {RESOURCE_KEYS.map((key) => (
-                    <div key={key} className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="number"
-                        value={draft.resources[key]?.current ?? 0}
-                        onChange={(event) =>
-                          mutateDraft((state) => {
-                            state.resources[key] = {
-                              current: Number(event.target.value || 0),
-                              maximum: state.resources[key]?.maximum ?? 0,
-                            };
-                          })
-                        }
-                      />
-                      <Input
-                        type="number"
-                        value={draft.resources[key]?.maximum ?? 0}
-                        onChange={(event) =>
-                          mutateDraft((state) => {
-                            state.resources[key] = {
-                              current: state.resources[key]?.current ?? 0,
-                              maximum: Number(event.target.value || 0),
-                            };
-                          })
-                        }
-                      />
+          <div className="flex flex-col gap-3">
+            {(draft.inventory.items ?? []).map((item, index) => (
+              <Card
+                key={`${item.ref.kind}:${item.ref.id}:${index}`}
+                size="sm"
+                className="border border-border/20 bg-background/50"
+              >
+                <CardContent className="grid gap-3 py-4 md:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="text-sm uppercase tracking-[0.18em] text-primary">
+                      {inventoryLabelFromRef(editorOptions, item.ref)}
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <SearchableMultiSelect
-                  label="Grimoires"
-                  options={grimoireOptions}
-                  values={draft.magic.grimoireRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.magic.grimoireRefs = registryRefs("grimoire", values);
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Known spells"
-                  options={spellOptions}
-                  values={draft.magic.knownSpellRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.magic.knownSpellRefs = registryRefs("spell", values);
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Prepared spells"
-                  options={spellOptions}
-                  values={draft.magic.preparedSpellRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.magic.preparedSpellRefs = registryRefs("spell", values);
-                    })
-                  }
-                />
-                <SearchableSingleSelect
-                  label="Pantheon"
-                  options={pantheonOptions}
-                  value={draft.faith.pantheonRef?.id}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.faith.pantheonRef = value ? registryRef("pantheon", value) : undefined;
-                    })
-                  }
-                />
-                <SearchableSingleSelect
-                  label="Patron"
-                  options={patronOptions}
-                  value={draft.faith.patronRef?.id}
-                  onChange={(value) =>
-                    mutateDraft((state) => {
-                      state.faith.patronRef = value ? registryRef("patron", value) : undefined;
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Boons"
-                  options={boonOptions}
-                  values={draft.faith.boonRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.faith.boonRefs = registryRefs("boon", values);
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Covenants"
-                  options={covenantOptions}
-                  values={draft.faith.covenantRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.faith.covenantRefs = registryRefs("covenant", values);
-                    })
-                  }
-                />
-                <SearchableMultiSelect
-                  label="Relics"
-                  options={relicOptions}
-                  values={draft.faith.relicRefs.map((entry) => entry.id)}
-                  onChange={(values) =>
-                    mutateDraft((state) => {
-                      state.faith.relicRefs = registryRefs("relic", values);
-                    })
-                  }
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {visibleCurrentStep === "gear" ? (
-            <div className="flex flex-col gap-5">
-              <div className="grid gap-3 md:grid-cols-3">
-                {visibleDenominations.map((denomination) => (
-                  <CompactTextField
-                    key={denomination}
-                    id={`currency-${denomination}`}
-                    label={getCurrencyFieldLabel(denomination)}
-                    type="number"
-                    value={String(readCurrencyAmount(draft.inventory.currency, denomination))}
-                    onChange={(value) =>
-                      mutateDraft((state) => {
-                        state.inventory.currency = writeCurrencyAmount(
-                          state.inventory.currency,
-                          denomination,
-                          Number(value || 0),
-                          editorOptions.gear.defaultCurrency,
-                        );
-                      })
-                    }
-                  />
-                ))}
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <SearchableSingleSelect
-                  label="Add inventory stack"
-                  options={inventoryCatalogOptions}
-                  value={inventorySelection}
-                  onChange={setInventorySelection}
-                  placeholder="Search inventory definitions"
-                />
-                <div className="flex flex-wrap gap-2 self-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!inventorySelection}
-                    onClick={() => {
-                      if (!inventorySelection) {
-                        return;
+                    <div className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
+                      {getInventoryPlacementLabel(item)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      aria-label={`Quantity for ${inventoryLabelFromRef(editorOptions, item.ref)}`}
+                      type="number"
+                      value={item.quantity}
+                      className="h-8 w-20"
+                      onChange={(event) =>
+                        applyInventoryMutation((state, catalog) => {
+                          updateInventoryStackQuantity(
+                            state,
+                            index,
+                            Number(event.target.value || 1),
+                            catalog,
+                          );
+                        })
                       }
-                      const [kind, id] = inventorySelection.split(":");
-                      applyInventoryMutation((state, catalog) => {
-                        appendInventoryStack(state, { kind, id } as InventoryOwnedRef, catalog);
-                      });
-                      setInventorySelection(undefined);
-                    }}
-                  >
-                    Add item
-                  </Button>
-                  {editorOptions.gear.containerDefinitions.slice(0, 3).map((definition) => (
+                    />
                     <Button
-                      key={definition.label}
-                      type="button"
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        mutateDraft((state) => {
-                          state.inventory.containers = [
-                            ...state.inventory.containers,
-                            {
-                              id: crypto.randomUUID(),
-                              label: definition.label,
-                              capacity: definition.capacity,
-                              occupiedSlots: 0,
-                            },
-                          ];
+                        applyInventoryMutation((state, catalog) => {
+                          removeInventoryStackAtIndex(state, index, catalog);
                         })
                       }
                     >
-                      + {definition.label}
+                      Remove
                     </Button>
-                  ))}
-                </div>
-              </div>
-
-              {(draft.inventory.items ?? []).map((item, index) => (
-                <Card key={`${item.ref.kind}:${item.ref.id}:${index}`} size="sm" className="border border-border/20 bg-background/50">
-                  <CardContent className="grid gap-3 py-4 md:grid-cols-[1fr_auto]">
-                    <div>
-                      <div className="text-sm uppercase tracking-[0.18em] text-primary">
-                        {inventoryLabelFromRef(editorOptions, item.ref)}
-                      </div>
-                      <div className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-muted-foreground">
-                        {getInventoryPlacementLabel(item)}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        type="number"
-                        value={item.quantity}
-                        className="h-8 w-20"
-                        onChange={(event) =>
-                          applyInventoryMutation((state, catalog) => {
-                            updateInventoryStackQuantity(state, index, Number(event.target.value || 1), catalog);
-                          })
-                        }
-                      />
+                    {!item.equippedSlot && !item.containerId && item.ref.kind !== "armor" ? (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() =>
                           applyInventoryMutation((state, catalog) => {
-                            removeInventoryStackAtIndex(state, index, catalog);
+                            equipInventoryStackAtIndex(state, index, "mainHand", catalog);
                           })
                         }
                       >
-                        Remove
+                        Equip
                       </Button>
-                      {!item.equippedSlot && !item.containerId && item.ref.kind !== "armor" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            applyInventoryMutation((state, catalog) => {
-                              equipInventoryStackAtIndex(state, index, "mainHand", catalog);
-                            })
-                          }
-                        >
-                          Equip
-                        </Button>
-                      ) : null}
-                      {!item.equippedSlot && !item.containerId && item.ref.kind === "armor" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            applyInventoryMutation((state, catalog) => {
-                              equipInventoryStackAtIndex(state, index, "armor", catalog);
-                            })
-                          }
-                        >
-                          Armor
-                        </Button>
-                      ) : null}
-                      {draft.inventory.containers[0] && !item.containerId && !item.equippedSlot ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            applyInventoryMutation((state, catalog) => {
-                              moveInventoryStackToContainerAtIndex(
-                                state,
-                                index,
-                                draft.inventory.containers[0]?.id ?? "",
-                                catalog,
-                              );
-                            })
-                          }
-                        >
-                          Stow
-                        </Button>
-                      ) : null}
-                      {item.equippedSlot ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            applyInventoryMutation((state, catalog) => {
-                              stowEquippedInventoryStackAtIndex(state, index, catalog);
-                            })
-                          }
-                        >
-                          Unequip
-                        </Button>
-                      ) : null}
-                      {item.containerId ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            applyInventoryMutation((state, catalog) => {
-                              removeInventoryStackFromContainerAtIndex(state, index, catalog);
-                            })
-                          }
-                        >
-                          Remove from container
-                        </Button>
-                      ) : null}
-                    </div>
-                  </CardContent>
+                    ) : null}
+                    {!item.equippedSlot && !item.containerId && item.ref.kind === "armor" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          applyInventoryMutation((state, catalog) => {
+                            equipInventoryStackAtIndex(state, index, "armor", catalog);
+                          })
+                        }
+                      >
+                        Armor
+                      </Button>
+                    ) : null}
+                    {draft.inventory.containers[0] && !item.containerId && !item.equippedSlot ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          applyInventoryMutation((state, catalog) => {
+                            moveInventoryStackToContainerAtIndex(
+                              state,
+                              index,
+                              draft.inventory.containers[0]?.id ?? "",
+                              catalog,
+                            );
+                          })
+                        }
+                      >
+                        Stow
+                      </Button>
+                    ) : null}
+                    {item.equippedSlot ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          applyInventoryMutation((state, catalog) => {
+                            stowEquippedInventoryStackAtIndex(state, index, catalog);
+                          })
+                        }
+                      >
+                        Unequip
+                      </Button>
+                    ) : null}
+                    {item.containerId ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          applyInventoryMutation((state, catalog) => {
+                            removeInventoryStackFromContainerAtIndex(state, index, catalog);
+                          })
+                        }
+                      >
+                        Remove from container
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </EditorSection>
+
+      <EditorSection
+        title="Validation And Finalize"
+        description="Live validation and combat-profile feedback stay visible while you finish the draft."
+      >
+        <div className="flex flex-col gap-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryMetric label="Status" value={npc.status === "complete" ? "Complete" : "Editing"} />
+            <SummaryMetric
+              label="Validation"
+              value={preview?.validation.ok ? "OK" : "Attention"}
+            />
+            <SummaryMetric label="Items" value={String(draft.inventory.items.length)} />
+            <SummaryMetric
+              label="Known spells"
+              value={String(draft.magic.knownSpellRefs.length)}
+            />
+          </div>
+
+          {preview?.validation.issues.length ? (
+            <div className="flex flex-col gap-3">
+              {preview.validation.issues.map((issue, index) => (
+                <Card
+                  key={`${issue.path}-${index}`}
+                  size="sm"
+                  className="border border-secondary/30 bg-secondary/8"
+                >
+                  <CardHeader className="gap-1">
+                    <CardTitle className="text-xs uppercase tracking-[0.18em] text-secondary">
+                      {issue.severity}
+                    </CardTitle>
+                    <CardDescription className="text-xs leading-6 text-muted-foreground">
+                      {issue.path}: {issue.message}
+                    </CardDescription>
+                  </CardHeader>
                 </Card>
               ))}
             </div>
-          ) : null}
-
-          {visibleCurrentStep === "review" ? (
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Badge variant="outline">{npc.status}</Badge>
-                <Badge variant="outline">{preview?.validation.ok ? "Validation OK" : "Attention"}</Badge>
-                <Badge variant="outline">{draft.inventory.items.length} items</Badge>
-                <Badge variant="outline">{draft.magic.knownSpellRefs.length} spells</Badge>
-              </div>
-
-              {preview?.validation.issues.length ? (
-                <div className="flex flex-col gap-3">
-                  {preview.validation.issues.map((issue, index) => (
-                    <Card key={`${issue.path}-${index}`} size="sm" className="border border-secondary/30 bg-secondary/8">
-                      <CardHeader className="gap-1">
-                        <CardTitle className="text-xs uppercase tracking-[0.18em] text-secondary">
-                          {issue.severity}
-                        </CardTitle>
-                        <CardDescription className="text-xs leading-6 text-muted-foreground">
-                          {issue.path}: {issue.message}
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="border border-primary/25 bg-primary/8 px-4 py-3 text-sm leading-7 text-foreground/90">
-                  No validation issues detected. This draft can be finalized as a complete entity.
-                </div>
-              )}
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card size="sm" className="border border-border/20 bg-card/55">
-                  <CardHeader className="gap-2">
-                    <CardTitle className="text-xs uppercase tracking-[0.28em] text-primary">
-                      Combat profile
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div>{preview?.combatProfile.displayName ?? "Syncing"}</div>
-                    <div>Movement: {preview ? preview.combatProfile.movement.land : 0}</div>
-                    <div>Initiative: {preview ? preview.combatProfile.initiative : 0}</div>
-                    <div>Soak: {preview ? preview.combatProfile.soak : 0}</div>
-                    <div>Attack options: {preview ? preview.combatProfile.attackOptions.length : 0}</div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={async () => {
-                    try {
-                      setSurfaceError(null);
-                      await completeDraft({
-                        bugchudId,
-                        state: normalizeNpcCurrencyState(
-                          draft,
-                          editorOptions?.gear.defaultCurrency ?? "zennies",
-                        ),
-                      } as never);
-                      setSaveState("saved");
-                      setSaveMessage("Completed");
-                    } catch (error) {
-                      setSurfaceError(error instanceof Error ? error.message : "Finalize failed.");
-                    }
-                  }}
-                  disabled={!preview?.validation.ok}
-                >
-                  <ShieldCheckIcon />
-                  Finalize entity
-                </Button>
-              </div>
+          ) : (
+            <div className="border border-primary/25 bg-primary/8 px-4 py-3 text-sm leading-7 text-foreground/90">
+              No validation issues detected. This draft can be finalized as a complete entity.
             </div>
-          ) : null}
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card size="sm" className="border border-border/20 bg-card/55">
+              <CardHeader className="gap-2">
+                <CardTitle className="text-xs uppercase tracking-[0.28em] text-primary">
+                  Combat profile
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div>{preview?.combatProfile.displayName ?? "Syncing"}</div>
+                <div>Movement: {preview ? preview.combatProfile.movement.land : 0}</div>
+                <div>Initiative: {preview ? preview.combatProfile.initiative : 0}</div>
+                <div>Soak: {preview ? preview.combatProfile.soak : 0}</div>
+                <div>
+                  Attack options: {preview ? preview.combatProfile.attackOptions.length : 0}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={async () => {
+                try {
+                  setSurfaceError(null);
+                  await completeDraft({
+                    bugchudId,
+                    state: normalizeNpcCurrencyState(
+                      draft,
+                      editorOptions?.gear.defaultCurrency ?? "zennies",
+                    ),
+                  } as never);
+                  setSaveState("saved");
+                  setSaveMessage("Completed");
+                } catch (error) {
+                  setSurfaceError(error instanceof Error ? error.message : "Finalize failed.");
+                }
+              }}
+              disabled={!preview?.validation.ok || activeConditionsError !== null || activeEffectsError !== null}
+            >
+              <ShieldCheckIcon />
+              Finalize entity
+            </Button>
+          </div>
+        </div>
+      </EditorSection>
+
+      <Card className="border border-border/20 bg-background/68">
+        <CardHeader className="gap-3 border-b border-border/20 pb-5">
+          <CardTitle className="font-display text-2xl font-black tracking-[-0.04em] text-primary">
+            Advanced
+          </CardTitle>
+          <CardDescription className="max-w-3xl text-sm leading-7 text-muted-foreground">
+            Raw JSON editing stays available here when you need it, without crowding the main form.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="py-6">
+          <Accordion type="single" collapsible defaultValue="effects">
+            <AccordionItem value="effects">
+              <AccordionTrigger>Raw effect state</AccordionTrigger>
+              <AccordionContent>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <CompactTextareaField
+                    id="active-conditions"
+                    label="Active conditions JSON"
+                    value={activeConditionsText}
+                    onChange={(value) => {
+                      setActiveConditionsText(value);
+                      try {
+                        const parsed = JSON.parse(value);
+                        setActiveConditionsError(null);
+                        mutateDraft((state) => {
+                          state.body.activeConditions = parsed as NpcState["body"]["activeConditions"];
+                        });
+                      } catch {
+                        setActiveConditionsError("Must be valid JSON.");
+                      }
+                    }}
+                    error={activeConditionsError}
+                  />
+                  <CompactTextareaField
+                    id="active-effects"
+                    label="Active effects JSON"
+                    value={activeEffectsText}
+                    onChange={(value) => {
+                      setActiveEffectsText(value);
+                      try {
+                        const parsed = JSON.parse(value);
+                        setActiveEffectsError(null);
+                        mutateDraft((state) => {
+                          state.activeEffects = parsed as NpcState["activeEffects"];
+                        });
+                      } catch {
+                        setActiveEffectsError("Must be valid JSON.");
+                      }
+                    }}
+                    error={activeEffectsError}
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
     </div>

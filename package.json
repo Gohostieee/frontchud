@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
-    "@bugchud/core": "^0.2.0",
+    "@bugchud/core": "^0.2.1",
     "@clerk/clerk-react": "^5.61.3",
     "@clerk/nextjs": "^6.39.1",
     "@phosphor-icons/react": "^2.1.10",

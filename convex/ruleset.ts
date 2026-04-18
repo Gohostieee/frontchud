@@ -185,56 +185,10 @@ export const getNpcCreationOptions = query({
   }),
 });
 
-export const getGuidedNpcCreationOptions = query({
-  args: {},
-  handler: async () => {
-    const creatures = catalogList("creature");
-    const npcLoadouts = catalogList("npcLoadout");
-    const items = catalogList("item");
-    const weapons = catalogList("weapon");
-    const armors = catalogList("armor");
-    const shields = catalogList("shield");
-    const grimoires = catalogList("grimoire");
-    const spells = catalogList("spell");
-    const mutations = catalogList("mutation");
-    const bionics = catalogList("bionic");
-    const pantheons = catalogList("pantheon");
-    const patrons = catalogList("patron");
-    const boons = catalogList("boon");
-    const covenants = catalogList("covenant");
-    const relics = catalogList("relic");
-
-    return {
-      rulesetId: bugchudCore.ruleset.id,
-      rulesetVersion: bugchudCore.ruleset.version,
-      creatures,
-      npcLoadouts,
-      items,
-      weapons,
-      armors,
-      shields,
-      grimoires,
-      spells,
-      mutations,
-      bionics,
-      pantheons,
-      patrons,
-      boons,
-      covenants,
-      relics,
-      containerDefinitions:
-        bugchudCore.ruleset.inventoryAndAssets.inventoryRules.containerDefinitions,
-      denominations: [...bugchudCore.ruleset.inventoryAndAssets.economy.denominations],
-      defaultCurrency: bugchudCore.ruleset.inventoryAndAssets.economy.defaultCurrency,
-    };
-  },
-});
-
 export const getNpcEditorOptions = query({
   args: {},
   handler: async () => {
     const creatures = catalogList("creature");
-    const npcLoadouts = catalogList("npcLoadout");
     const items = catalogList("item");
     const weapons = catalogList("weapon");
     const armors = catalogList("armor");
@@ -254,7 +208,6 @@ export const getNpcEditorOptions = query({
       rulesetVersion: bugchudCore.ruleset.version,
       templates: {
         creatures,
-        npcLoadouts,
       },
       body: {
         mutations,

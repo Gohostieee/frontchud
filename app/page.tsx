@@ -4,7 +4,6 @@ import type { ElementType } from "react";
 import Link from "next/link";
 import {
   ArrowSquareOut,
-  Broadcast,
   ClockCounterClockwise,
   Scroll,
   Skull,
@@ -21,25 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
-
-const fieldNotes = [
-  {
-    cycle: "Cycle 41 // Sector 02",
-    note: "The iron marrow of the city is weeping oil again. The rituals suggest a synchronization error between the gears of reality and the void below.",
-  },
-  {
-    cycle: "Cycle 39 // Sector 12",
-    note: "Encountered a scrap-golem with a human tongue. It kept chanting binary sequences that sounded like prayers. Terminated sequence for safety.",
-  },
-  {
-    cycle: "Cycle 38 // Sector 00",
-    note: "Found a rusted data-slate in the belly of a furnace-beast. The content was encrypted in a language that should not exist for another century.",
-  },
-  {
-    cycle: "Cycle 35 // Sector 09",
-    note: "Beware the Bugchud echo. It mimics the sounds of progress but leads only to recursive loops of logic failure.",
-  },
-] as const;
 
 const teaserModules = [
   { label: "Encounters", stamp: "Redacted", rotation: "rotate-[11deg]" },
@@ -61,50 +41,50 @@ export default function Home() {
 
   const characterSummary = characterOptions
     ? `${characterOptions.races.length} races // ${characterOptions.origins.length} origins // ${characterOptions.backgrounds.length} backgrounds`
-    : "Synchronizing canonical race and origin matrices.";
+    : "Loading...";
   const npcSummary = npcOptions
     ? `${npcOptions.creatures.length} creatures // ${npcOptions.npcLoadouts.length} loadouts`
-    : "Reading creature taxonomy from the imported ruleset.";
+    : "Loading...";
 
   const moduleCards = [
     {
       title: "New Character",
-      sequence: "Sequence 001 // Forge identity",
+      sequence: "Sequence 001",
       summary: characterSummary,
       icon: UserCirclePlus,
       href: "/characters/new",
     },
     {
       title: "NPC Manager",
-      sequence: "Sequence 002 // Summon entities",
+      sequence: "Sequence 002",
       summary: npcSummary,
       icon: Skull,
       href: "/npcs",
     },
     {
       title: "Ruleset Explorer",
-      sequence: "Sequence 003 // Decipher logic",
+      sequence: "Sequence 003",
       summary: `${rulesetId} // v${rulesetVersion}`,
       icon: Scroll,
     },
     {
       title: "Session Log",
-      sequence: "Sequence 004 // Archive truth",
+      sequence: "Sequence 004",
       summary: isAuthenticated
-        ? "Authenticated conduit detected. Protected manager handoff primed."
-        : "Sign in to cross the protected archive threshold.",
+        ? "Manager access enabled."
+        : "Sign in for manager access.",
       icon: ClockCounterClockwise,
     },
   ] as const;
 
   const terminalFeed = [
-    `[INFO] IMPORTING RULESET: ${rulesetId}.HEX`,
+    `[INFO] RULESET: ${rulesetId}`,
     `[INFO] CHARACTER OPTIONS: ${characterOptions ? `${characterOptions.races.length} RACES / ${characterOptions.origins.length} ORIGINS / ${characterOptions.backgrounds.length} BACKGROUNDS` : "PENDING"}`,
     `[INFO] NPC OPTIONS: ${npcOptions ? `${npcOptions.creatures.length} CREATURES / ${npcOptions.npcLoadouts.length} LOADOUTS` : "PENDING"}`,
     isAuthenticated
-      ? "[SUCCESS] CLERK SESSION VERIFIED. MANAGER CONDUIT OPEN."
-      : "[WARN] UNSEALED VISITOR STATE. AUTH REQUIRED FOR MANAGER ACCESS.",
-    "[ERROR] CRITICAL BREACH IN 'WORLD_TOOLS' MODULE. ACCESS REVOKED.",
+      ? "[SUCCESS] SESSION ACTIVE."
+      : "[WARN] NOT SIGNED IN. MANAGER ACCESS REQUIRES AUTHENTICATION.",
+    "[INFO] WORLD_TOOLS: COMING SOON.",
   ] as const;
 
   return (
@@ -118,10 +98,6 @@ export default function Home() {
             <div className="absolute inset-y-12 right-0 hidden w-[28rem] bg-[radial-gradient(circle_at_center,_rgba(255,176,0,0.16),_transparent_65%)] blur-3xl lg:block" />
 
             <div className="relative flex max-w-5xl flex-col gap-6">
-              <p className="font-mono text-[0.72rem] uppercase tracking-[0.48em] text-muted-foreground">
-                Command hub // public ingress node
-              </p>
-
               <h1 className="hero-title max-w-6xl font-display text-[4.5rem] leading-[0.9] font-black tracking-[-0.08em] text-primary sm:text-[6rem] lg:text-[8.8rem]">
                 FRONTCHUD
               </h1>
@@ -135,15 +111,13 @@ export default function Home() {
                 </div>
 
                 <p className="max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-                  {isAuthenticated
-                    ? "Clerk has verified this operator. Step through the protected manager conduit to inspect imported rulesets, shape characters, and monitor active ritual state."
-                    : "An ancient interface for BUGCHUD operations. Manage characters, summon NPCs, and navigate the imported canon through a ritualistic digital lens."}
+                  Manage characters, NPCs, and rulesets.
                 </p>
 
                 <div className="flex flex-wrap gap-3 text-[0.72rem] uppercase tracking-[0.34em] text-muted-foreground">
                   <span>{rulesetId}</span>
                   <span className="text-primary">v{rulesetVersion}</span>
-                  <span>{isAuthenticated ? "Session sealed" : "Public visitor mode"}</span>
+                  <span>{isAuthenticated ? "Signed in" : "Not signed in"}</span>
                 </div>
               </div>
 
@@ -151,7 +125,7 @@ export default function Home() {
             </div>
           </section>
 
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_23rem]">
+          <div className="grid gap-8">
             <div className="flex min-w-0 flex-col gap-10">
               <section className="grid gap-5 md:grid-cols-2">
                 {moduleCards.map((card) => (
@@ -216,46 +190,6 @@ export default function Home() {
                 ))}
               </section>
             </div>
-
-            <aside className="min-w-0">
-              <section className="ritual-surface-strong sticky top-28 flex max-h-[calc(100svh-10rem)] flex-col overflow-hidden">
-                <div className="flex items-center justify-between bg-card px-5 py-4">
-                  <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.34em] text-secondary">
-                    Field Notes
-                  </h2>
-                  <Broadcast className="size-5 text-secondary" weight="fill" />
-                </div>
-
-                <div className="flex flex-col gap-6 overflow-y-auto px-5 py-6">
-                  {fieldNotes.map((entry, index) => (
-                    <article key={entry.cycle} className="flex flex-col gap-3">
-                      <time className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
-                        {entry.cycle}
-                      </time>
-                      <p className="text-base leading-7 text-foreground/88 italic">
-                        &ldquo;{entry.note}&rdquo;
-                      </p>
-                      {index < fieldNotes.length - 1 ? (
-                        <Separator className="ghost-divider opacity-35" />
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-
-                <div className="mt-auto border-t border-border/20 bg-background px-5 py-4">
-                  <div className="flex items-center justify-between bg-card px-4 py-3">
-                    <div className="flex items-end gap-1">
-                      <span className="h-3 w-1 bg-primary/30" />
-                      <span className="h-4 w-1 bg-primary/55" />
-                      <span className="h-5 w-1 bg-primary" />
-                    </div>
-                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.28em] text-muted-foreground">
-                      Feed stabilized
-                    </span>
-                  </div>
-                </div>
-              </section>
-            </aside>
           </div>
         </div>
       </main>
@@ -263,12 +197,7 @@ export default function Home() {
       <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-border/20 bg-sidebar/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-3 px-4 py-2 lg:px-6">
           <div className="font-mono text-[0.62rem] uppercase tracking-[0.34em] text-secondary">
-            System_uptime: 432:12:09 // active_rituals: 03
-          </div>
-          <div className="flex flex-wrap items-center gap-5 font-mono text-[0.62rem] uppercase tracking-[0.32em] text-secondary">
-            <span>Diagnostics</span>
-            <span>Terminal_Feed</span>
-            <span>Node_Status</span>
+            {rulesetId} // v{rulesetVersion}
           </div>
         </div>
       </footer>

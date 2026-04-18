@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import { GuidedNpcCreator } from "../_components/guided-npc-creator";
+import { NpcTemplateLauncher } from "../_components/npc-template-launcher";
 
 export default function NewNpcPage() {
   return (
@@ -16,14 +16,15 @@ export default function NewNpcPage() {
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">NPC creation</Badge>
-                <Badge variant="ghost">Guided route</Badge>
+                <Badge variant="ghost">Template first</Badge>
               </div>
               <div>
                 <h1 className="font-display text-4xl font-black tracking-[-0.06em] text-primary sm:text-5xl">
                   New Entity
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-                  Stay on this route while you shape identity, stage optional prefills, refine capabilities and gear, and review the final handoff.
+                  Choose a creature template here, create the draft immediately, and finish
+                  everything else in the single-page NPC editor.
                 </p>
               </div>
             </div>
@@ -35,7 +36,7 @@ export default function NewNpcPage() {
             </div>
           </header>
 
-          <GuidedNpcCreator />
+          <NpcTemplateLauncher />
         </div>
       </main>
     </div>
